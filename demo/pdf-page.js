@@ -83,7 +83,7 @@
       {
         layout,
         withFixedPages: data.withFixedPages,
-        pages: pages.map((p) => ({ kind: p.kind, items: () => p.items })),
+        pages: data.pages.map((p) => ({ kind: p.kind, hasItems: p.hasItems, items: () => p.items })),
       },
       { rootDir: '', imagesDir: 'data/images', texts: data.texts, warn }
     );

@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Éditeur — Tapigro Boeken</title>
   <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/pages.css">
   <link rel="stylesheet" href="css/editor.css">
+  
   
   
   <link rel="icon" href="assets/logo-tapigro.png">
@@ -58,12 +60,23 @@
       </label>
       <span id="save-status" class="save-status is-saved" role="status">Enregistré</span>
       <button id="save-btn" type="button" class="btn sec petit">Enregistrer</button>
-      <a id="pdf-link" class="btn petit" href="pdf.fr.html?id=0">Exporter en PDF</a>
+      <a id="preview-link" class="btn sec petit" href="preview.fr.html?id=0" title="Voir le livre tel qu’il sera imprimé">👁 Aperçu</a>
+      <a id="pdf-link" class="btn petit" data-pdf href="pdf.fr.html?id=0">Exporter en PDF</a>
+      <button id="panel-toggle" type="button" class="btn petit panel-toggle" aria-controls="product-panel" aria-expanded="false">📦 Produits</button>
+    </div>
+    <div id="editor-help" class="editor-help" role="note" hidden>
+      <p>Cherchez un produit dans la liste « Produits » et glissez-le dans une case vide — ou cliquez sur « + Ajouter ». Une page est pleine ? Déposez le produit entre deux autres : la suite glisse vers la page suivante.</p>
+      <button id="editor-help-close" type="button" class="lien" aria-label="Fermer l’explication" title="Fermer l’explication">×</button>
     </div>
     <p id="editor-error" class="error" hidden></p>
+    <p id="editor-live" class="sr-only" aria-live="polite"></p>
     <div id="spreads" class="spreads" aria-label="Pages du boek"></div>
   </div>
   <aside class="product-panel" id="product-panel" aria-label="Produits">
+    <div class="panel-head">
+      <strong>Produits</strong>
+      <button id="panel-close" type="button" class="lien panel-close" aria-label="Fermer la liste des produits">×</button>
+    </div>
     <div class="panel-filters">
       <input id="prod-search" type="search" placeholder="Rechercher code ou nom…" aria-label="Recherche produit">
       <select id="prod-category" aria-label="Filtre catégorie"><option value="">Toutes catégories</option></select>
@@ -76,6 +89,7 @@
 </div>
 <script src="vendor/sortable.min.js" defer></script>
 <script src="js/layout-render.js" defer></script>
+<script src="js/book-plan.js" defer></script>
 <script src="js/editor/autosave.js" defer></script>
 <script src="js/editor/title-follow.js" defer></script>
 <script src="js/editor/scroll-anchor.js" defer></script>

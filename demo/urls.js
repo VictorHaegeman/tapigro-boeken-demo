@@ -8,6 +8,7 @@
  * serveur local que sous https://<compte>.github.io/tapigro-boeken-demo/.
  *
  *   /                  → index.html            /books/12/edit  → editor.html?id=12
+ *                                             /books/12/preview → preview.html?id=12
  *   /products?x=1      → products.html?x=1     /api/books/12/pdf → pdf.html?id=12
  *   /products/12       → product.html?id=12    /imports, /admin/users → pages « non disponible »
  *   /img/CODE/photo    → data/images/<fichier> (manifeste du catalogue)
@@ -56,8 +57,9 @@
       if (pathname === '/' || pathname === '/login') return page('index.html');
       if (pathname === '/products') return `${page('products.html')}${query}`;
       if ((m = /^\/products\/(\d+)$/.exec(pathname))) return `${page('product.html')}?id=${m[1]}`;
-      if (pathname === '/books') return page('books.html');
+      if (pathname === '/books') return `${page('books.html')}${query}`;
       if ((m = /^\/books\/(\d+)\/edit$/.exec(pathname))) return `${page('editor.html')}?id=${m[1]}`;
+      if ((m = /^\/books\/(\d+)\/preview$/.exec(pathname))) return `${page('preview.html')}?id=${m[1]}${query ? `&${query.slice(1)}` : ''}`;
       if ((m = /^\/api\/books\/(\d+)\/pdf$/.exec(pathname))) return `${page('pdf.html')}?id=${m[1]}`;
       if (pathname === '/imports') return page('imports.html');
       if (pathname === '/admin/users') return page('users.html');

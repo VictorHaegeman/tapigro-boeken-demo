@@ -24,6 +24,8 @@
     const fGroup = document.getElementById('pf-group');
     const fActive = document.getElementById('pf-active');
     const clearBtn = document.getElementById('pf-clear');
+    const makeBookBtn = document.getElementById('pf-make-book');
+    let canEdit = false;
 
     // État des filtres, initialisé depuis l'URL (les cartes du tableau de bord
     // pointent vers /products?photo=0, ?active=0, etc.).
@@ -133,6 +135,13 @@
       noResEl.hidden = !(s.total > 0 && list.items.length === 0);
       countEl.textContent = App.t('products.count', { n: total });
       clearBtn.hidden = !hasFilters();
+      // « Boek maken van deze selectie » : editors, s'il y a des produits
+      // actifs dans ce qui est affiché (les retirés ne vont jamais dans un boek).
+      const sel = new URLSearchParams({ nieuw: 'selectie' });
+      for (const key of ['q', 'category', 'group']) if (state[key]) sel.set(key, state[key]);
+      for (const key of ['photo', 'barcode']) if (state[key] !== 'all') sel.set(key, state[key]);
+      makeBookBtn.href = App.url(`/books?${sel}`);
+      makeBookBtn.hidden = !canEdit || state.active === '0' || total === 0;
       const pages = Math.max(1, Math.ceil(total / LIMIT));
       const page = Math.floor(state.offset / LIMIT) + 1;
       pager.hidden = pages <= 1;
@@ -148,6 +157,16 @@
         active: fActive.value, offset: 0,
       });
       refresh().catch(App.flashError);
+    });
+    // Recherche à la frappe (comme le panneau de l'éditeur).
+    let typing = null;
+    fQ.addEventListener('input', () => {
+      clearTimeout(typing);
+      typing = setTimeout(() => {
+        if (fQ.value.trim() === state.q) return;
+        Object.assign(state, { q: fQ.value.trim(), offset: 0 });
+        refresh().catch(App.flashError);
+      }, 300);
     });
     for (const sel of [fCat, fGroup, fActive]) {
       sel.addEventListener('change', () => {
@@ -202,7 +221,7 @@
       fQ.value = state.q;
       fActive.value = state.active;
       const [me, meta] = await Promise.all([App.fetchMe(), App.api('/api/products/meta')]);
-      const canEdit = Boolean(me && me.user.role !== 'viewer');
+      canEdit = Boolean(me && me.user.role !== 'viewer');
       openBtn.hidden = !canEdit;
       for (const [sel, list, values] of [
         [fCat, document.getElementById('np-categories'), meta.categories],

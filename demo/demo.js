@@ -117,6 +117,14 @@
       if (!exists(`/api/books/${idParam}`)) return window.location.replace(url('/books'));
       document.getElementById('editor-root').dataset.bookId = String(idParam);
       document.getElementById('pdf-link').href = url(`/api/books/${idParam}/pdf`);
+      document.getElementById('preview-link').href = url(`/books/${idParam}/preview`);
+      document.title = `${backend.handle('GET', `/api/books/${idParam}`).body.name} — Tapigro Boeken`;
+    }
+    if (page === 'preview') {
+      if (!exists(`/api/books/${idParam}`)) return window.location.replace(url('/books'));
+      document.getElementById('preview-root').dataset.bookId = String(idParam);
+      document.getElementById('pv-pdf').href = url(`/api/books/${idParam}/pdf`);
+      document.getElementById('pv-welcome-edit').href = url(`/books/${idParam}/edit`);
       document.title = `${backend.handle('GET', `/api/books/${idParam}`).body.name} — Tapigro Boeken`;
     }
     if (page === 'demo-pdf') {

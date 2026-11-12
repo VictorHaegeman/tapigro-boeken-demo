@@ -105,14 +105,6 @@ body[data-page="editor"] .container {
 }
 .page-actions .btn:hover { color: var(--accent); border-color: var(--accent); }
 
-.page-box {
-  position: relative;
-  overflow: hidden;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.18);
-}
-
-.lr-page { background: #fff; }
 
 /* Refus visuel : page pleine survolée pendant un drag. */
 .lr-page.drop-refused .lr-grid {
@@ -123,7 +115,6 @@ body[data-page="editor"] .container {
 
 /* ---- cellules ------------------------------------------------------------------ */
 
-.lr-cell { background: #fff; }
 /* Cellule en cours de déplacement = la case CIBLE, surlignée. */
 .lr-cell.sortable-ghost { opacity: 0.55; outline: 0.8mm solid var(--accent); background: #ead9da; }
 
@@ -170,41 +161,42 @@ body[data-page="editor"] .container {
 
 .editor:not(.read-only) .lr-cell { cursor: grab; }
 
+/* Bouton × : 28 px À L'ÉCRAN quelle que soit l'échelle des pages
+   (--inv-scale = 1 / échelle, posé par editor.js), visible au survol, au
+   focus clavier, et toujours sur écran tactile. */
 .cell-remove {
   position: absolute;
   top: 0;
   right: 0;
-  width: 7mm;
-  height: 7mm;
+  z-index: 2;
+  width: calc(28px * var(--inv-scale, 1));
+  height: calc(28px * var(--inv-scale, 1));
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 0;
-  background: rgba(179, 38, 30, 0.85);
+  border-radius: 0 0 0 calc(6px * var(--inv-scale, 1));
+  background: rgba(179, 38, 30, 0.9);
   color: #fff;
-  font-size: 4.5mm;
+  font-size: calc(20px * var(--inv-scale, 1));
   line-height: 1;
   cursor: pointer;
   opacity: 0;
 }
-.lr-cell:hover .cell-remove { opacity: 1; }
+.lr-cell:hover .cell-remove,
+.lr-cell:focus-within .cell-remove { opacity: 1; }
+.cell-remove:focus-visible { outline: calc(3px * var(--inv-scale, 1)) solid var(--ink); outline-offset: 0; }
+@media (hover: none) { .cell-remove { opacity: 0.85; } }
 
-/* Produit désactivé (retiré du catalogue au dernier import) : signalé à tous
-   les rôles AVANT impression. */
-.cell-inactive {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 0.8mm 0;
-  background: rgba(179, 38, 30, 0.9);
-  color: #fff;
-  font-size: 2.8mm;
-  text-align: center;
-  text-transform: uppercase;
-  letter-spacing: 0.3mm;
-  pointer-events: none;
+/* Signal discret : article qui vient de glisser (page pleine) ou d'être ajouté. */
+@keyframes cell-signal {
+  0%, 60% { box-shadow: 0 0 0 1.4mm rgba(214, 160, 40, 0.75); }
+  100% { box-shadow: 0 0 0 1.4mm rgba(214, 160, 40, 0); }
 }
+.lr-cell.is-shifted, .lr-cell.is-new { animation: cell-signal 2.2s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .lr-cell.is-shifted, .lr-cell.is-new { animation: none; box-shadow: 0 0 0 1.4mm rgba(214, 160, 40, 0.6); }
+}
+
 
 /* Slots de texte éditables des pages fixes : zone repérable (pointillés),
    franchement visible au survol/focus (contour plein + fond), curseur texte. */
@@ -286,6 +278,7 @@ body[data-page="editor"] .container {
   flex: 1 1 auto;
   overflow-y: auto;
   padding: 0 0.5rem 0.5rem;
+  user-select: none; /* pas de sélection de texte parasite après un glisser */
 }
 
 .prod-entry {
@@ -313,7 +306,28 @@ body[data-page="editor"] .container {
 .prod-thumb.is-missing { visibility: hidden; }
 .prod-entry:hover .prod-thumb.is-missing { visibility: visible; }
 
-.prod-txt { min-width: 0; }
+.prod-txt { min-width: 0; flex: 1 1 auto; }
+.prod-badge {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.prod-badge[hidden] { display: none; }
+/* « + Toevoegen » : discret, net au survol / focus de la ligne. */
+.prod-entry .prod-add {
+  flex: none;
+  margin: 0;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  opacity: 0.55;
+}
+.prod-entry:hover .prod-add, .prod-entry:focus-within .prod-add, .prod-add:focus-visible { opacity: 1; }
+@media (hover: none) { .prod-entry .prod-add { opacity: 1; } }
 .prod-code { font-weight: 700; font-size: 0.85rem; }
 .prod-name {
   font-size: 0.8rem;
@@ -333,10 +347,73 @@ body > .prod-entry {
   max-width: 300px;
 }
 
-/* Lecture seule (viewer) : pas de poignées. */
+/* Lecture seule : pas de poignées, pas de panneau d'ajout, pas de statut. */
 .editor.read-only .lr-cell,
 .editor.read-only .prod-entry { cursor: default; }
-.editor.read-only .cell-remove { display: none; }
+.editor.read-only .cell-remove,
+.editor.read-only .product-panel,
+.editor.read-only .save-status,
+.editor.read-only #panel-toggle { display: none; }
+
+/* Bandeau d'aide (refermable, mémorisé). */
+.editor-help {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.5rem 1rem;
+  background: #fbf3df;
+  border-bottom: 1px solid #ecdcae;
+  color: #5b4a17;
+  font-size: 0.88rem;
+}
+.editor-help[hidden] { display: none; }
+.editor-help p { flex: 1; margin: 0; line-height: 1.45; }
+.editor-help .lien { font-size: 1.2rem; line-height: 1; padding: 0 0.25rem; color: inherit; }
+
+/* Double page vide de fin : pas imprimée — légende en retrait. */
+.page-slot.is-unprinted .page-caption { font-style: italic; }
+.page-actions .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* En-tête du panneau : visible seulement en tiroir (écran étroit). */
+.panel-head { display: none; }
+.panel-toggle { display: none; }
+
+/* ---- écran étroit (gsm) : une page par ligne, panneau produits en tiroir ---------- */
+@media (max-width: 760px) {
+  .editor-toolbar { flex-wrap: wrap; gap: 0.45rem 0.6rem; padding: 0.5rem 0.75rem; }
+  .editor-toolbar #book-name { flex: 1 1 100%; order: -1; }
+  .editor-toolbar .fixed-setting { white-space: normal; }
+  #save-btn { display: none; } /* tout s'enregistre seul ; le statut reste visible */
+  .panel-toggle { display: inline-flex; }
+  .spreads { padding: 0.8rem 0.5rem; }
+  .spread { flex-direction: column; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+  .product-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    width: auto;
+    max-width: none;
+    height: 72vh;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -8px 24px rgba(16, 24, 40, 0.2);
+    transform: translateY(105%);
+    transition: transform 0.2s ease-out;
+  }
+  .product-panel.is-open { transform: none; }
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6rem 0.8rem 0;
+  }
+  .panel-close { font-size: 1.6rem; line-height: 1; padding: 0 0.3rem; }
+  .prod-entry .prod-add { padding: 0.4rem 0.7rem; font-size: 0.85rem; }
+}
 
 /* Messages (App.flash) dans l'éditeur : en SURIMPRESSION, centrés en haut.
    Dans le flux, un message poussait tout l'éditeur vers le bas puis le

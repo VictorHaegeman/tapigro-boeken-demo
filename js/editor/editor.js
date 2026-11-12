@@ -13,12 +13,21 @@
  * pages de contenu par paires, puis le dos. Une double page vide est toujours
  * disponible en fin de boek (ensureTrailingSpread). Les pages fixes sont
  * VERROUILLÉES : aucun dépôt possible, seuls leurs textes (slots du layout)
- * sont éditables.
+ * sont éditables. Les légendes numérotent les pages comme le PDF
+ * (book-plan.js pageSequence) ; la double page vide de fin est marquée « pas
+ * imprimée ».
+ *
+ * Ajouter un produit : glisser-déposer (dragdrop.js) — y compris entre deux
+ * articles d'une page pleine (cascade côté serveur) — ou bouton « + Toevoegen »
+ * du panneau (au clavier aussi) qui place le produit après le dernier article
+ * du boek. Retirer : bouton × de la cellule, avec « Ongedaan maken ».
  */
 (function () {
   'use strict';
 
   const PX_PER_MM = 96 / 25.4;
+  const NARROW = '(max-width: 760px)'; // gsm : une page par ligne, panneau en tiroir
+  const HELP_KEY = 'tapigro-editor-help-closed';
 
   document.addEventListener('DOMContentLoaded', () => {
     const rootEl = document.getElementById('editor-root');
@@ -31,6 +40,9 @@
     const fixedToggle = document.getElementById('fixed-pages-toggle');
     const fixedToggleWrap = document.getElementById('fixed-pages-setting');
     const errorEl = document.getElementById('editor-error');
+    const liveEl = document.getElementById('editor-live');
+    const panelEl = document.getElementById('product-panel');
+    const panelToggle = document.getElementById('panel-toggle');
     const saver = EditorAutosave.createSaver(document.getElementById('save-status'));
 
     let book = null;
@@ -43,6 +55,8 @@
     let cellCache = new Map(); // itemId → élément .lr-cell (décoré)
     let fixedCache = new Map(); // 'cover'|'page2'|'back' → {scale, texts, wrap}
     let lastScale = null;
+    let sequence = new Map(); // pageId → élément de pageSequence (numéro du PDF)
+    let pendingMarks = null; // {ids, className} : cellules à signaler au prochain rendu
 
     function showError(err) {
       errorEl.textContent = err.message;
@@ -78,34 +92,77 @@
 
     // ---- mutations granulaires ---------------------------------------------------
 
+    // Annonce pour les lecteurs d'écran (zone aria-live invisible).
+    function announce(text) {
+      liveEl.textContent = '';
+      requestAnimationFrame(() => {
+        liveEl.textContent = text;
+      });
+    }
+
+    // Signale brièvement des cellules (article déplacé par une cascade,
+    // article ajouté) — au prochain rendu, puis la classe disparaît.
+    function markCells(ids, className) {
+      pendingMarks = { ids, className };
+    }
+    function applyMarks() {
+      if (!pendingMarks) return;
+      const { ids, className } = pendingMarks;
+      pendingMarks = null;
+      for (const id of ids) {
+        const cell = cellCache.get(id);
+        if (!cell) continue;
+        cell.classList.add(className);
+        setTimeout(() => cell.classList.remove(className), 2200);
+      }
+    }
+
+    // Réponse {item, shifted} d'un dépôt / déplacement → état local. Une
+    // cascade (page pleine) déplace d'autres articles et peut créer une page :
+    // on recharge alors tout le boek.
+    async function applyPlaced(res) {
+      if (res.shifted && res.shifted.length) {
+        book = await App.api(`/api/books/${bookId}`);
+        markCells(res.shifted, 'is-shifted');
+        announce(App.t('editor.shifted', { n: res.shifted.length }));
+      } else {
+        upsertItemInState(res.item);
+      }
+      return res.item;
+    }
+
     async function apiInsert({ pageId, productId, beforeItemId }) {
       // Le clone du panneau reste dans la case (« en attente », editor.css)
       // jusqu'au re-rendu depuis la réponse : pas de case qui se vide puis se
       // remplit. En cas d'erreur le re-rendu le fait disparaître.
+      let item = null;
       try {
-        const { item } = await saver.track(
-          App.api(`/api/books/${bookId}/items`, {
-            method: 'POST',
-            body: { pageId, productId, beforeItemId },
-          })
+        item = await applyPlaced(
+          await saver.track(
+            App.api(`/api/books/${bookId}/items`, {
+              method: 'POST',
+              body: { pageId, productId, beforeItemId },
+            })
+          )
         );
-        upsertItemInState(item);
       } catch (err) {
         showError(err);
       }
       renderSpreads();
       await ensureTrailingSpread();
+      return item;
     }
 
     async function apiMove({ itemId, pageId, beforeItemId }) {
       try {
-        const { item } = await saver.track(
-          App.api(`/api/books/${bookId}/items/${itemId}`, {
-            method: 'PATCH',
-            body: { pageId, beforeItemId },
-          })
+        await applyPlaced(
+          await saver.track(
+            App.api(`/api/books/${bookId}/items/${itemId}`, {
+              method: 'PATCH',
+              body: { pageId, beforeItemId },
+            })
+          )
         );
-        upsertItemInState(item);
       } catch (err) {
         showError(err);
       }
@@ -113,14 +170,56 @@
       await ensureTrailingSpread();
     }
 
+    // Retrait avec « Ongedaan maken » : le produit revient à sa place (avant
+    // l'article qui le suivait, s'il est toujours sur la même page).
     async function apiRemove(itemId) {
+      const page = book.pages.find((p) => p.items.some((it) => it.id === itemId));
+      if (!page) return;
+      const idx = page.items.findIndex((it) => it.id === itemId);
+      const removed = page.items[idx];
+      const nextId = page.items[idx + 1] ? page.items[idx + 1].id : null;
       try {
         await saver.track(App.api(`/api/books/${bookId}/items/${itemId}`, { method: 'DELETE' }));
         removeItemFromState(itemId);
       } catch (err) {
         showError(err);
+        renderSpreads();
+        return;
       }
       renderSpreads();
+      const code = removed.product.code;
+      App.flash('ok', App.t('editor.removed', { code }), {
+        label: App.t('editor.undo'),
+        onClick: async () => {
+          const target = pageById(page.id);
+          if (!target) return showError(new Error(App.t('apiErrors.pageNotFound')));
+          const before = nextId !== null && target.items.some((it) => it.id === nextId) ? nextId : null;
+          const item = await apiInsert({ pageId: page.id, productId: removed.product.id, beforeItemId: before });
+          if (item) {
+            markCells([item.id], 'is-new');
+            renderSpreads();
+            announce(App.t('editor.restored', { code }));
+          }
+        },
+      });
+    }
+
+    // « + Toevoegen » : après le DERNIER article du boek (ordre de lecture) —
+    // prévisible, comme un remplissage à la suite. Page pleine : le serveur
+    // l'envoie au début de la page de produits suivante (créée au besoin).
+    async function addToEnd(product) {
+      const products = book.pages.filter((p) => p.kind === 'products');
+      if (!products.length) return;
+      const withItems = products.filter((p) => p.items.length);
+      const target = withItems.length ? withItems[withItems.length - 1] : products[0];
+      const item = await apiInsert({ pageId: target.id, productId: product.id, beforeItemId: null });
+      if (!item) return;
+      markCells([item.id], 'is-new');
+      renderSpreads();
+      const entry = sequence.get(item.pageId);
+      announce(App.t('editor.added', { code: product.code, n: entry && entry.number ? entry.number : '?' }));
+      const slot = spreadsEl.querySelector(`.page-slot[data-key="page:${item.pageId}"]`);
+      if (slot) slot.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
 
     // Recharge l'état complet depuis le serveur (opérations de pages : les
@@ -191,6 +290,8 @@
     function currentScale() {
       const pageW = layout.page.widthMm * PX_PER_MM;
       const avail = spreadsEl.clientWidth || 900;
+      // Écran étroit : une page par ligne (editor.css), à pleine largeur.
+      if (window.matchMedia(NARROW).matches) return Math.min(0.85, (avail - 24) / pageW);
       return Math.min(0.85, (avail - 64) / (2 * pageW));
     }
 
@@ -229,7 +330,11 @@
         delBtn.type = 'button';
         delBtn.className = 'btn sec petit';
         delBtn.textContent = App.t('editor.deletePage');
-        delBtn.title = App.t('editor.deletePageTitle');
+        // Une page qui porte des produits ne se supprime pas : bouton
+        // désactivé, l'infobulle dit pourquoi (plutôt qu'une erreur après coup).
+        const blocked = page.items.length > 0;
+        delBtn.disabled = blocked;
+        delBtn.title = App.t(blocked ? 'editor.deletePageBlocked' : 'editor.deletePageTitle');
         delBtn.addEventListener('click', () => apiDeletePage(page.id));
         actions.appendChild(delBtn);
         wrap.appendChild(actions);
@@ -311,7 +416,8 @@
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'cell-remove';
-          btn.title = App.t('editor.remove');
+          btn.title = App.t('editor.removeLabel', { code: item.product.code });
+          btn.setAttribute('aria-label', App.t('editor.removeLabel', { code: item.product.code }));
           btn.textContent = '×';
           btn.addEventListener('click', () => apiRemove(item.id));
           cell.appendChild(btn);
@@ -337,15 +443,11 @@
         EditorDragDrop.fillEmptySlots(grid, LayoutRender.pageCapacity(layout));
         sortables.push(
           EditorDragDrop.initPageGrid(grid, page.id, {
-            capacity: () => LayoutRender.pageCapacity(layout),
             onInsert: apiInsert,
             onMove: apiMove,
-            // Drop annulé au relâchement (page pleine ou relâché hors de la
-            // grille adoptante) : aucun POST, re-rendu depuis l'état.
-            onRefused: (reason) => {
-              showError(
-                new Error(App.t(reason === 'full' ? 'editor.pageFullRefused' : 'editor.dropOutside'))
-              );
+            // Relâché hors de la grille adoptante : aucun POST, re-rendu.
+            onRefused: () => {
+              showError(new Error(App.t('editor.dropOutside')));
               renderSpreads();
             },
           })
@@ -353,6 +455,8 @@
       }
       const wrap = captionned(scaledBox(pageEl, scale), caption, page);
       wrap.dataset.key = `page:${page.id}`; // repère de défilement (scroll-anchor.js)
+      const entry = sequence.get(page.id);
+      if (entry && !entry.printed) wrap.classList.add('is-unprinted');
       return wrap;
     }
 
@@ -383,6 +487,18 @@
 
       for (const s of sortables) s.destroy();
       sortables = [];
+      // Numéros du PDF (book-plan.js) : mêmes légendes que l'aperçu.
+      sequence = new Map();
+      for (const entry of TapigroBookPlan.pageSequence(book, layout)) {
+        if (entry.page) sequence.set(entry.page.id, entry);
+      }
+      const captionFor = (page) => {
+        const c = TapigroBookPlan.captionOf(sequence.get(page.id));
+        return App.t(c.key, c.params);
+      };
+      // Bouton × des cellules à taille d'écran constante (≥ 24 px) malgré
+      // la mise à l'échelle des pages (editor.css --inv-scale).
+      spreadsEl.style.setProperty('--inv-scale', String(1 / scale));
       EditorDragDrop.clearRefusals();
       const nextCells = new Map();
       if (!book.fixedPages) fixedCache = new Map();
@@ -398,8 +514,8 @@
 
       // Pages de contenu par paires.
       let pair = [];
-      book.pages.forEach((page, i) => {
-        pair.push(buildContentPage(page, App.t('editor.pageN', { n: i + 1 }), scale, nextCells));
+      book.pages.forEach((page) => {
+        pair.push(buildContentPage(page, captionFor(page), scale, nextCells));
         if (pair.length === 2) {
           spreads.push(pair);
           pair = [];
@@ -423,6 +539,8 @@
       lastScale = scale;
       const restored = EditorScrollAnchor.resolveAnchor(anchor, pageBoxes(), sameScale);
       spreadsEl.scrollTop = restored === null ? scrollTop : restored;
+      applyMarks();
+      updateBadges();
     }
 
     // ---- panneau produits ----------------------------------------------------------
@@ -465,8 +583,39 @@
       name.textContent = p.name;
       txt.appendChild(code);
       txt.appendChild(name);
+      // Déjà placé : « ×N in dit boek » (mis à jour à chaque rendu, updateBadges).
+      const badge = document.createElement('span');
+      badge.className = 'prod-badge';
+      badge.hidden = true;
+      txt.appendChild(badge);
       el.appendChild(txt);
+      if (!readOnly) {
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'prod-add btn sec petit';
+        add.textContent = App.t('editor.add');
+        add.title = App.t('editor.addTitle', { code: p.code });
+        add.setAttribute('aria-label', App.t('editor.addTitle', { code: p.code }));
+        add.addEventListener('click', () => addToEnd(p));
+        el.appendChild(add);
+      }
       return el;
+    }
+
+    // Combien de fois chaque produit du panneau est déjà dans le boek.
+    function updateBadges() {
+      const counts = new Map();
+      for (const page of book.pages) {
+        for (const it of page.items) counts.set(it.product.id, (counts.get(it.product.id) || 0) + 1);
+      }
+      listEl.querySelectorAll('.prod-entry').forEach((el) => {
+        const n = counts.get(Number(el.dataset.productId)) || 0;
+        const badge = el.querySelector('.prod-badge');
+        if (!badge) return;
+        badge.hidden = n === 0;
+        badge.textContent = n ? App.t('editor.inBook', { n }) : '';
+        badge.title = n ? App.t('editor.inBookTitle', { n }) : '';
+      });
     }
 
     async function loadProducts(reset) {
@@ -488,6 +637,7 @@
         panel.total = total;
         for (const p of items) listEl.appendChild(productEntry(p));
         panel.offset += items.length;
+        updateBadges();
         countEl.textContent = App.t('editor.productCount', { shown: panel.offset, total });
         moreBtn.hidden = panel.offset >= total;
       } catch (err) {
@@ -634,10 +784,13 @@
       renderSpreads();
       await ensureTrailingSpread();
       initPanel(meta);
+      initDrawer();
       await loadProducts(true);
       // Recalcul de l'échelle APRÈS le chargement initial des produits : le
       // panneau (ou une barre de défilement) a pu modifier la largeur utile.
       renderSpreads();
+      if (!readOnly) initHelp();
+      scrollToFirstProductPage();
 
       let resizeTimer = null;
       window.addEventListener('resize', () => {
@@ -656,6 +809,59 @@
         });
         ro.observe(spreadsEl);
       }
+    }
+
+    // À l'ouverture, la vue se place sur la 1re page de produits (sinon un
+    // nouveau boek ne montre que la couverture et la page 2 : les cases à
+    // remplir sont hors de l'écran).
+    function scrollToFirstProductPage() {
+      const first = book.pages.find((p) => p.kind === 'products');
+      const slot = first && spreadsEl.querySelector(`.page-slot[data-key="page:${first.id}"]`);
+      if (!slot) return;
+      const spread = slot.closest('.spread') || slot;
+      const top = spread.getBoundingClientRect().top - spreadsEl.getBoundingClientRect().top + spreadsEl.scrollTop;
+      spreadsEl.scrollTop = Math.max(0, top - 12);
+    }
+
+    // Petit bandeau d'aide, refermable ; on s'en souvient (navigateur).
+    function initHelp() {
+      const help = document.getElementById('editor-help');
+      let closed = false;
+      try {
+        closed = localStorage.getItem(HELP_KEY) === '1';
+      } catch {
+        /* stockage indisponible : le bandeau s'affiche */
+      }
+      help.hidden = closed;
+      document.getElementById('editor-help-close').addEventListener('click', () => {
+        help.hidden = true;
+        try {
+          localStorage.setItem(HELP_KEY, '1');
+        } catch {
+          /* stockage indisponible : fermé pour cette page seulement */
+        }
+      });
+    }
+
+    // Écran étroit : le panneau produits est un tiroir (bouton « Producten »).
+    function initDrawer() {
+      const setOpen = (open) => {
+        panelEl.classList.toggle('is-open', open);
+        panelToggle.setAttribute('aria-expanded', String(open));
+        if (open) document.getElementById('prod-search').focus({ preventScroll: true });
+      };
+      panelToggle.hidden = readOnly;
+      panelToggle.addEventListener('click', () => setOpen(!panelEl.classList.contains('is-open')));
+      document.getElementById('panel-close').addEventListener('click', () => {
+        setOpen(false);
+        panelToggle.focus();
+      });
+      panelEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && panelEl.classList.contains('is-open')) {
+          setOpen(false);
+          panelToggle.focus();
+        }
+      });
     }
 
     init().catch(showError);

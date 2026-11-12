@@ -23,6 +23,7 @@
       translateError: require('../server/middleware/errors').translateError,
       rules: require('../server/services/productRules'),
       layoutsLib: require('../server/services/layouts'),
+      bookPlan: require('../public/js/book-plan'),
       translator: (lang) => i18n.translator(lang),
       hasKey: i18n.has,
     });
@@ -38,13 +39,14 @@
       translateError: s.errors.translateError,
       rules: s.productRules,
       layoutsLib: s.layouts,
+      bookPlan: s.bookPlan,
       translator: () => core.createTranslator(I18N.messages, fallback),
       hasKey: (key) => core.lookup(fallback, key) !== undefined,
     });
   }
 })(typeof self !== 'undefined' ? self : this, function (deps) {
   'use strict';
-  const { validate, HttpError, translateError, rules, layoutsLib, translator, hasKey } = deps;
+  const { validate, HttpError, translateError, rules, layoutsLib, bookPlan, translator, hasKey } = deps;
 
   const STATE_VERSION = 1;
   const STEP = 1024; // bookService.js : pas initial entre deux positions
@@ -335,7 +337,13 @@
           layoutId: b.layoutId,
           fixedPages: hasFixed(b),
           updatedAt: b.updatedAt,
-          pageCount: state.pages.filter((p) => p.bookId === b.id).length,
+          // Nombre de pages du PDF (bookService.js listBooks).
+          pageCount: bookPlan
+            .pageSequence(
+              { fixedPages: hasFixed(b), pages: bookPages(b.id).map((p) => ({ kind: p.kind, hasItems: pageItems(p.id).length > 0 })) },
+              layoutById[b.layoutId] || {}
+            )
+            .filter((e) => e.printed).length,
           itemCount: state.items.filter((it) => it.bookId === b.id).length,
         }));
     }
@@ -355,7 +363,7 @@
       return page;
     }
 
-    function createBook(name, layoutId, { fixedPages = true } = {}) {
+    function createBook(name, layoutId, { fixedPages = true, fill } = {}) {
       const layout = layoutById[layoutId];
       if (!layout) {
         throw new HttpError(
@@ -366,6 +374,32 @@
         );
       }
       checkBookQuota();
+      // Remplissage automatique : mêmes règles que bookService (book-plan.js).
+      let plan = null;
+      if (fill !== undefined && fill !== null) {
+        if (bookPlan.fillHasEmptyList(fill)) {
+          throw new HttpError(400, 'FILL_EMPTY_SELECTION', 'No category or group selected', 'apiErrors.FILL_EMPTY_SELECTION');
+        }
+        const options = bookPlan.normalizeFill(fill);
+        if (!options) throw new HttpError(400, 'VALIDATION', 'fill is invalid', 'apiErrors.fillInvalid');
+        const candidates = state.products
+          .map(productShape)
+          .filter((p) => bookPlan.matchesFill(p, options));
+        plan = bookPlan.planFill(candidates, {
+          capacity: capacityOf(layout),
+          sort: options.sort,
+          newPagePerCategory: options.newPagePerCategory,
+        });
+        if (plan.length === 0) {
+          throw new HttpError(400, 'VALIDATION', 'No product matches the selection', 'apiErrors.fillEmpty');
+        }
+        if (plan.length > MAX_PAGES_PER_BOOK) {
+          throw new HttpError(400, 'QUOTA', `Too many pages (${MAX_PAGES_PER_BOOK} max per book)`, {
+            key: 'apiErrors.tooManyPages',
+            params: { n: MAX_PAGES_PER_BOOK },
+          });
+        }
+      }
       const withFixed = Boolean(fixedPages) && layoutsLib.hasFixedPages(layout);
       const texts = layoutsLib.layoutSlots(layout).has(TITLE_SLOT) ? { [TITLE_SLOT]: name } : {};
       const t = now();
@@ -379,8 +413,17 @@
         updatedAt: t,
       };
       state.books.push(b);
-      insertPage(b.id, 1);
-      insertPage(b.id, 2);
+      if (plan) {
+        plan.forEach((ids, i) => {
+          const page = insertPage(b.id, i + 1);
+          ids.forEach((productId, j) => {
+            state.items.push({ id: nextId(state.items), bookId: b.id, pageId: page.id, productId, position: (j + 1) * STEP });
+          });
+        });
+      } else {
+        insertPage(b.id, 1);
+        insertPage(b.id, 2);
+      }
       return getBook(b.id);
     }
 
@@ -447,15 +490,15 @@
     function duplicateBook(id) {
       const b = getBookRow(id);
       checkBookQuota();
-      const t = now();
+      const stamp = now();
       const copy = {
         id: nextId(state.books),
-        name: `${b.name} (copie)`,
+        name: bookPlan.copyNameOf(b.name, (name) => t('books.copyName', { name })),
         layoutId: b.layoutId,
         texts: clone(b.texts),
         hasFixedPages: b.hasFixedPages,
-        createdAt: t,
-        updatedAt: t,
+        createdAt: stamp,
+        updatedAt: stamp,
       };
       state.books.push(copy);
       for (const page of bookPages(id)) {
@@ -493,7 +536,8 @@
       const after = afterPageNo === undefined ? maxNo : Math.min(afterPageNo, maxNo);
       for (const p of pages) if (p.pageNo > after) p.pageNo += 1;
       const page = insertPage(bookId, after + 1, kind);
-      touchBook(b);
+      // Page de produits vide en fin de boek : rien ne change à l'impression.
+      if (kind !== 'products' || after < maxNo) touchBook(b);
       return { id: page.id, pageNo: page.pageNo, kind: page.kind, items: [] };
     }
 
@@ -510,7 +554,8 @@
     // Ordonnancement gap-based (ARCHITECTURE §3) : renumérotation (1024, 2048…)
     // quand le trou est épuisé, insertion au point médian.
     function renumberPage(pageId) {
-      pageItems(pageId).forEach((it, i) => {
+      // Un article « garé » (position négative, moveItem) n'est pas renuméroté.
+      pageItems(pageId).filter((it) => it.position > 0).forEach((it, i) => {
         it.position = (i + 1) * STEP;
       });
     }
@@ -539,46 +584,116 @@
       return Math.floor((prev + next) / 2);
     }
 
-    function insertItem(bookId, { pageId, productId, beforeItemId = null }) {
-      const b = getBookRow(bookId);
-      getPageRow(bookId, pageId);
-      if (!productById(productId)) throw new HttpError(404, 'NOT_FOUND', 'Product not found', 'apiErrors.productNotFound');
-      const capacity = capacityOf(layoutOf(b));
-      if (pageItems(pageId).length >= capacity) {
-        throw new HttpError(409, 'PAGE_FULL', `Page is full (${capacity} items max)`, {
-          key: 'apiErrors.pageFull',
-          params: { n: capacity },
-        });
-      }
-      const position = positionFor(pageId, beforeItemId);
-      const it = { id: nextId(state.items), bookId, pageId, productId, position };
-      state.items.push(it);
-      touchBook(b);
-      return itemShape(it);
+    // Page pleine : glissement en cascade (transcription de bookService.js
+    // makeRoom / placeFor, règle pure book-plan.js cascadeChain).
+    function contentPages(bookId) {
+      return bookPages(bookId).map((p) => ({ id: p.id, kind: p.kind, itemIds: pageItems(p.id).map((it) => it.id) }));
     }
 
-    function moveItem(bookId, itemId, { pageId, beforeItemId = null }) {
-      const b = getBookRow(bookId);
-      const it = getItemRow(bookId, itemId);
-      getPageRow(bookId, pageId);
-      if (beforeItemId === itemId) {
-        throw new HttpError(400, 'VALIDATION', 'beforeItemId cannot be the moved item itself');
-      }
-      if (pageId !== it.pageId) {
-        const capacity = capacityOf(layoutOf(b));
-        if (pageItems(pageId).length >= capacity) {
-          throw new HttpError(409, 'PAGE_FULL', `Page is full (${capacity} items max)`, {
-          key: 'apiErrors.pageFull',
-          params: { n: capacity },
-        });
-        }
-      }
-      const position = positionFor(pageId, beforeItemId, itemId);
-      it.pageId = pageId;
-      it.position = position;
-      touchBook(b);
-      return itemShape(it);
+    function appendProductsPage(bookId) {
+      return addPage(bookId, {}).id;
     }
+
+    function makeRoom(bookId, pages, from, capacity, excludeItemId) {
+      const { chain, needsNewPage } = bookPlan.cascadeChain(pages, capacity, from, excludeItemId);
+      if (needsNewPage) {
+        pages.push({ id: appendProductsPage(bookId), kind: 'products', itemIds: [] });
+        chain.push(pages.length - 1);
+      }
+      const shifted = [];
+      const others = (p) => p.itemIds.filter((id) => id !== excludeItemId);
+      for (let k = chain.length - 1; k >= 1; k--) {
+        const src = pages[chain[k - 1]];
+        const dst = pages[chain[k]];
+        const moving = others(src).pop();
+        const first = others(dst)[0];
+        const position = positionFor(dst.id, first === undefined ? null : first, excludeItemId);
+        const it = state.items.find((x) => x.id === moving);
+        it.pageId = dst.id;
+        it.position = position;
+        src.itemIds = src.itemIds.filter((id) => id !== moving);
+        dst.itemIds.unshift(moving);
+        shifted.push(moving);
+      }
+      return shifted;
+    }
+
+    function placeFor(bookId, b, { pageId, beforeItemId, excludeItemId = null }) {
+      const capacity = capacityOf(layoutOf(b));
+      const pages = contentPages(bookId);
+      const from = pages.findIndex((p) => p.id === pageId);
+      const count = pages[from].itemIds.filter((id) => id !== excludeItemId).length;
+      if (count < capacity) return { pageId, beforeItemId, shifted: [] };
+      if (beforeItemId == null) {
+        const { chain, needsNewPage } = bookPlan.cascadeChain(pages, capacity, from, excludeItemId);
+        let next = chain[1];
+        if (next === undefined && needsNewPage) {
+          pages.push({ id: appendProductsPage(bookId), kind: 'products', itemIds: [] });
+          next = pages.length - 1;
+        }
+        const shifted = makeRoom(bookId, pages, next, capacity, excludeItemId);
+        const first = pages[next].itemIds.filter((id) => id !== excludeItemId)[0];
+        return { pageId: pages[next].id, beforeItemId: first === undefined ? null : first, shifted };
+      }
+      if (!pages[from].itemIds.includes(beforeItemId)) {
+        throw new HttpError(400, 'VALIDATION', 'beforeItemId is not an item of this page');
+      }
+      const shifted = makeRoom(bookId, pages, from, capacity, excludeItemId);
+      const stays = pages[from].itemIds.includes(beforeItemId);
+      return { pageId, beforeItemId: stays ? beforeItemId : null, shifted };
+    }
+
+    // Le serveur travaille en transaction : la démo copie l'état avant une
+    // mutation à plusieurs étapes et le restaure en cas d'erreur.
+    function atomically(fn) {
+      const saved = clone(state);
+      try {
+        return fn();
+      } catch (err) {
+        state = saved;
+        throw err;
+      }
+    }
+
+    function insertItemPlaced(bookId, { pageId, productId, beforeItemId = null }) {
+      return atomically(() => {
+        const b = getBookRow(bookId);
+        if (getPageRow(bookId, pageId).kind !== 'products') {
+          throw new HttpError(409, 'PAGE_NOT_PRODUCTS', 'Not a products page', 'apiErrors.PAGE_NOT_PRODUCTS');
+        }
+        if (!productById(productId)) throw new HttpError(404, 'NOT_FOUND', 'Product not found', 'apiErrors.productNotFound');
+        const place = placeFor(bookId, b, { pageId, beforeItemId });
+        const position = positionFor(place.pageId, place.beforeItemId);
+        const it = { id: nextId(state.items), bookId, pageId: place.pageId, productId, position };
+        state.items.push(it);
+        touchBook(b);
+        return { item: itemShape(it), shifted: place.shifted };
+      });
+    }
+
+    function moveItemPlaced(bookId, itemId, { pageId, beforeItemId = null }) {
+      return atomically(() => {
+        const b = getBookRow(bookId);
+        getItemRow(bookId, itemId);
+        if (getPageRow(bookId, pageId).kind !== 'products') {
+          throw new HttpError(409, 'PAGE_NOT_PRODUCTS', 'Not a products page', 'apiErrors.PAGE_NOT_PRODUCTS');
+        }
+        if (beforeItemId === itemId) {
+          throw new HttpError(400, 'VALIDATION', 'beforeItemId cannot be the moved item itself');
+        }
+        getItemRow(bookId, itemId).position = -itemId; // « garé » pendant la cascade
+        const place = placeFor(bookId, b, { pageId, beforeItemId, excludeItemId: itemId });
+        const position = positionFor(place.pageId, place.beforeItemId, itemId);
+        const it = getItemRow(bookId, itemId);
+        it.pageId = place.pageId;
+        it.position = position;
+        touchBook(b);
+        return { item: itemShape(it), shifted: place.shifted };
+      });
+    }
+
+    const insertItem = (bookId, body) => insertItemPlaced(bookId, body).item;
+    const moveItem = (bookId, itemId, body) => moveItemPlaced(bookId, itemId, body).item;
 
     function deleteItem(bookId, itemId) {
       const b = getBookRow(bookId);
@@ -727,7 +842,8 @@
           },
           b
         );
-        return { status: 201, body: { book: createBook(v.name, v.layoutId, { fixedPages: v.fixedPages }) } };
+        const fill = b && typeof b === 'object' ? b.fill : undefined;
+        return { status: 201, body: { book: createBook(v.name, v.layoutId, { fixedPages: v.fixedPages, fill }) } };
       }],
       ['GET', /^\/api\/books\/([^/]+)$/, (m) => ({ body: getBook(idOf(m[1])) })],
       ['GET', /^\/api\/books\/([^/]+)\/pdf-data$/, (m) => ({ body: pdfData(idOf(m[1])) })],
@@ -773,7 +889,7 @@
           },
           b
         );
-        return { status: 201, body: { item: insertItem(id, v) } };
+        return { status: 201, body: insertItemPlaced(id, v) };
       }],
       ['PATCH', /^\/api\/books\/([^/]+)\/items\/([^/]+)$/, (m, b) => {
         const id = idOf(m[1]);
@@ -785,7 +901,7 @@
           },
           b
         );
-        return { body: { item: moveItem(id, itemId, v) } };
+        return { body: moveItemPlaced(id, itemId, v) };
       }],
       ['DELETE', /^\/api\/books\/([^/]+)\/items\/([^/]+)$/, (m) => {
         deleteItem(idOf(m[1]), idOf(m[2]));
@@ -861,7 +977,9 @@
       addPage,
       deletePage,
       insertItem,
+      insertItemPlaced,
       moveItem,
+      moveItemPlaced,
       deleteItem,
       duplicateBook,
       listBooks,

@@ -174,11 +174,13 @@ window.App = (() => {
   // ---- messages flash ------------------------------------------------------------
   // flash('ok'|'erreur'|'info', message) : bandeau en haut de <main>. Les succès
   // disparaissent après 5 s ; les erreurs restent, avec une croix de fermeture.
-  function flash(type, message) {
+  // action (facultatif) : {label, onClick} → bouton dans le message (ex.
+  // « Ongedaan maken ») ; le message se ferme quand on clique dessus.
+  function flash(type, message, action) {
     const zone = document.getElementById('flash');
     if (!zone) {
       if (type === 'erreur') alert(message);
-      return;
+      return null;
     }
     const el = document.createElement('div');
     el.className = `flash ${type}`;
@@ -187,6 +189,17 @@ window.App = (() => {
     texte.className = 'texte';
     texte.textContent = message;
     el.appendChild(texte);
+    if (action) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'flash-action';
+      btn.textContent = action.label;
+      btn.addEventListener('click', () => {
+        el.remove();
+        action.onClick();
+      });
+      el.appendChild(btn);
+    }
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'fermer';
@@ -195,11 +208,19 @@ window.App = (() => {
     close.addEventListener('click', () => el.remove());
     el.appendChild(close);
     zone.appendChild(el);
-    if (type !== 'erreur') setTimeout(() => el.remove(), 5000);
+    if (type !== 'erreur') setTimeout(() => el.remove(), action ? 8000 : 5000);
+    return el;
   }
 
   function flashError(err) {
     flash('erreur', errorMessage(err));
+  }
+
+  // Nom de fichier d'un import : la commande `npm run charger` l'enregistre
+  // avec le suffixe « (ligne de commande) » — affiché dans la langue de
+  // l'interface.
+  function importFileName(name) {
+    return String(name || '').replace(/ \(ligne de commande\)$/, ` (${t('imports.viaCli')})`);
   }
 
   // ---- modale de confirmation ------------------------------------------------------
@@ -329,9 +350,12 @@ window.App = (() => {
                 .join('')}
             </select>
           </td>
-          <td><span class="pill ${u.isActive ? 's-actif' : 's-inactif'}">${esc(u.isActive ? t('users.statusActive') : t('users.statusDisabled'))}</span></td>
+          <td><span class="pill ${u.isActive ? 's-actif' : 's-inactif'}">${esc(u.isActive ? t('users.statusActive') : t('users.statusDisabled'))}</span>${
+            u.locked ? ` <span class="pill s-retire" title="${esc(t('users.lockedTitle'))}">${esc(t('users.locked'))}</span>` : ''
+          }</td>
           <td class="mut" title="${esc(u.createdAt)}">${esc(formatDate(u.createdAt))}</td>
           <td>
+            ${u.locked ? `<button class="u-unlock btn petit" type="button">${esc(t('users.unlock'))}</button>` : ''}
             <button class="u-toggle btn sec petit" type="button">${esc(u.isActive ? t('users.disable') : t('users.enable'))}</button>
             <button class="u-password btn sec petit" type="button">${esc(t('users.passwordBtn'))}</button>
             <button class="u-delete btn rouge petit" type="button">${esc(t('common.delete'))}</button>
@@ -346,6 +370,17 @@ window.App = (() => {
       tr.querySelector('.u-role').addEventListener('change', (e) => {
         patchUser(id, { role: e.target.value }, t('users.roleChanged', { name: user.username, role: roleLabel(e.target.value) }));
       });
+      const unlockBtn = tr.querySelector('.u-unlock');
+      if (unlockBtn) {
+        unlockBtn.addEventListener('click', () => {
+          api(`/api/users/${id}/unlock`, { method: 'POST' })
+            .then(() => {
+              flash('ok', t('users.unlocked', { name: user.username }));
+              return renderUsers();
+            })
+            .catch(flashError);
+        });
+      }
       tr.querySelector('.u-toggle').addEventListener('click', async () => {
         if (user.isActive) {
           const ok = await confirmDialog({
@@ -451,7 +486,65 @@ window.App = (() => {
     });
   }
 
+  // Liens « PDF » (a[data-pdf]) : téléchargement avec un état visible
+  // (« PDF wordt gemaakt… », lien désactivé) au lieu d'un clic sans retour —
+  // un gros boek prend plusieurs secondes. Les erreurs du serveur (déjà un PDF
+  // en cours…) s'affichent en clair. Hors serveur (démo statique : le lien
+  // mène à une page), le lien est suivi normalement.
+  function fileNameOf(res) {
+    const cd = res.headers.get('Content-Disposition') || '';
+    const m = /filename="([^"]+)"/.exec(cd);
+    return m ? m[1] : 'boek.pdf';
+  }
+
+  async function downloadPdf(link) {
+    if (link.getAttribute('aria-disabled') === 'true') return;
+    const label = link.textContent;
+    link.setAttribute('aria-disabled', 'true');
+    link.classList.add('is-busy');
+    link.textContent = t('common.pdfBusy');
+    try {
+      const res = await fetch(link.getAttribute('href'), { headers: { Accept: 'application/pdf' } });
+      if (!res.ok) {
+        let message = t('common.httpError', { status: res.status });
+        try {
+          const data = await res.json();
+          if (data && data.error) message = data.error.message;
+        } catch {
+          /* pas de JSON */
+        }
+        throw new Error(message);
+      }
+      const blob = await res.blob();
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = fileNameOf(res);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 10000);
+    } catch (err) {
+      flashError(err);
+    } finally {
+      link.textContent = label;
+      link.removeAttribute('aria-disabled');
+      link.classList.remove('is-busy');
+    }
+  }
+
+  function initPdfLinks() {
+    document.addEventListener('click', (e) => {
+      const link = e.target.closest('a[data-pdf]');
+      if (!link || !/^\/api\//.test(link.getAttribute('href') || '')) return;
+      if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      e.preventDefault();
+      downloadPdf(link);
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    initPdfLinks();
     initLangSwitch();
     initLogout();
     initLoginPage();
@@ -479,5 +572,6 @@ window.App = (() => {
     formatDate,
     relativeDate,
     roleLabel,
+    importFileName,
   };
 })();

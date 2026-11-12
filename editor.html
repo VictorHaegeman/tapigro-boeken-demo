@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Editor — Tapigro Boeken</title>
   <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/pages.css">
   <link rel="stylesheet" href="css/editor.css">
+  
   
   
   <link rel="icon" href="assets/logo-tapigro.png">
@@ -58,12 +60,23 @@
       </label>
       <span id="save-status" class="save-status is-saved" role="status">Opgeslagen</span>
       <button id="save-btn" type="button" class="btn sec petit">Opslaan</button>
-      <a id="pdf-link" class="btn petit" href="pdf.html?id=0">Exporteren als PDF</a>
+      <a id="preview-link" class="btn sec petit" href="preview.html?id=0" title="Bekijk het boek zoals het wordt afgedrukt">👁 Voorbeeld</a>
+      <a id="pdf-link" class="btn petit" data-pdf href="pdf.html?id=0">Exporteren als PDF</a>
+      <button id="panel-toggle" type="button" class="btn petit panel-toggle" aria-controls="product-panel" aria-expanded="false">📦 Producten</button>
+    </div>
+    <div id="editor-help" class="editor-help" role="note" hidden>
+      <p>Zoek een product in de lijst ‘Producten’ en sleep het naar een leeg vak — of klik op ‘+ Toevoegen’. Is een pagina vol? Zet het product tussen twee andere: de rest schuift door naar de volgende pagina.</p>
+      <button id="editor-help-close" type="button" class="lien" aria-label="Uitleg sluiten" title="Uitleg sluiten">×</button>
     </div>
     <p id="editor-error" class="error" hidden></p>
+    <p id="editor-live" class="sr-only" aria-live="polite"></p>
     <div id="spreads" class="spreads" aria-label="Pagina’s van het boek"></div>
   </div>
   <aside class="product-panel" id="product-panel" aria-label="Producten">
+    <div class="panel-head">
+      <strong>Producten</strong>
+      <button id="panel-close" type="button" class="lien panel-close" aria-label="Productenlijst sluiten">×</button>
+    </div>
     <div class="panel-filters">
       <input id="prod-search" type="search" placeholder="Productcode of naam zoeken…" aria-label="Product zoeken">
       <select id="prod-category" aria-label="Filter op categorie"><option value="">Alle categorieën</option></select>
@@ -76,6 +89,7 @@
 </div>
 <script src="vendor/sortable.min.js" defer></script>
 <script src="js/layout-render.js" defer></script>
+<script src="js/book-plan.js" defer></script>
 <script src="js/editor/autosave.js" defer></script>
 <script src="js/editor/title-follow.js" defer></script>
 <script src="js/editor/scroll-anchor.js" defer></script>

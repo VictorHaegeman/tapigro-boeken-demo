@@ -1,0 +1,31 @@
+/* pages.css — rendu des pages d'un boek à l'écran (layout-render.js), commun
+   à l'éditeur et à l'aperçu. La géométrie vient du layout JSON (mm) ; ici
+   seulement le cadre de la feuille et les signalements écran. */
+
+.page-box {
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.18);
+}
+
+.lr-page { background: #fff; }
+
+.lr-cell { background: #fff; }
+
+/* Produit désactivé (retiré du catalogue au dernier import) : signalé à tous
+   les rôles AVANT impression. */
+.cell-inactive {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0.8mm 0;
+  background: rgba(179, 38, 30, 0.9);
+  color: #fff;
+  font-size: 2.8mm;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.3mm;
+  pointer-events: none;
+}

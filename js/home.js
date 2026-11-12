@@ -151,7 +151,7 @@
       card('/imports', App.t('home.lastImport'), App.relativeDate(it.startedAt), {
         t: it.kind === 'excel'
           ? App.t('home.excelSummary', { created: it.created, updated: it.updated, deactivated: it.deactivated })
-          : App.t('home.imagesSummary', { file: it.fileName }),
+          : App.t('home.imagesSummary', { file: App.importFileName(it.fileName) }),
       }),
       card('/imports', App.t('home.importsTotal'), total)
     );

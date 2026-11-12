@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aperçu — Tapigro Boeken</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/pages.css">
+  
+  <link rel="stylesheet" href="css/preview.css">
+  
+  
+  <link rel="icon" href="assets/logo-tapigro.png">
+  <link rel="stylesheet" href="demo/demo.css">
+  <script src="i18n/fr.js"></script>
+  <script src="demo/shared.js"></script>
+  <script src="data/catalog.js"></script>
+  <script src="demo/urls.js"></script>
+  <script src="demo/backend.js"></script>
+  <script src="demo/demo.js"></script>
+</head>
+<body data-page="preview">
+  <div id="app">
+    
+    <aside id="menu">
+      <a class="logo" href="index.fr.html" title="Tapigro Boeken — tableau de bord">
+        <img src="assets/logo-tapigro.png" alt="Tapigro" class="logo-img">
+        <span class="logo-txt">Boeken<small>catalogues &amp; étiquettes</small></span>
+      </a>
+      <nav>
+        <a href="index.fr.html" class="" title="Tableau de bord"><span class="ico">🏠</span><span class="lbl">Tableau de bord</span></a>
+        <a href="products.fr.html" class="" title="Produits"><span class="ico">📦</span><span class="lbl">Produits</span></a>
+        <a href="books.fr.html" class="on" title="Boeken"><span class="ico">📚</span><span class="lbl">Boeken</span></a>
+        
+        <a href="imports.fr.html" class="" title="Imports"><span class="ico">⬆️</span><span class="lbl">Imports</span></a>
+        <a href="users.fr.html" class="" title="Utilisateurs"><span class="ico">👤</span><span class="lbl">Utilisateurs</span></a>
+        
+      </nav>
+      <div class="qui">
+        <span class="qui-nom">Démo</span>
+        <span class="qui-role">Administrateur</span>
+        <button id="logout-btn" type="button" class="lien" title="Se déconnecter"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Se déconnecter</span></button>
+        
+        <span class="langues" role="group" aria-label="Langue de l’application">
+          <button type="button" class="lien lang-btn" data-lang="nl" lang="nl" aria-pressed="false">NL</button><button type="button" class="lien lang-btn on" data-lang="fr" lang="fr" aria-pressed="true">FR</button>
+        </span>
+      </div>
+    </aside>
+    
+    <main class="container">
+      <div id="flash" aria-live="polite"></div>
+      <div id="preview-root" class="preview" data-book-id="0">
+  <div class="preview-toolbar">
+    <a id="pv-back" class="back-link" href="books.fr.html">← Boeken</a>
+    <h1 id="pv-title" class="pv-title">Aperçu</h1>
+    <span id="pv-pos" class="pv-pos" aria-live="polite"></span>
+    <span class="pv-zoom" role="group" aria-label="Zoom">
+      <button id="pv-zoom-out" type="button" class="btn sec petit" title="Zoom arrière" aria-label="Zoom arrière">−</button>
+      <button id="pv-zoom-fit" type="button" class="btn sec petit" title="Ajuster les pages à la fenêtre">Ajuster</button>
+      <button id="pv-zoom-in" type="button" class="btn sec petit" title="Zoom avant" aria-label="Zoom avant">+</button>
+    </span>
+    <button id="pv-print" type="button" class="btn sec petit" title="Imprimer le livre en A4, comme le PDF">🖨 Imprimer</button>
+    <a id="pv-pdf" class="btn petit" data-pdf href="pdf.fr.html?id=0">Télécharger le PDF</a>
+  </div>
+  <div id="pv-welcome" class="pv-welcome" role="status" hidden>
+    <p id="pv-welcome-text"></p>
+    <a id="pv-welcome-edit" class="btn petit" href="editor.fr.html?id=0">Modifier</a>
+    <button id="pv-welcome-close" type="button" class="lien" aria-label="Fermer le message">×</button>
+  </div>
+  <p id="pv-empty" class="pv-empty" hidden></p>
+  <div id="pv-stage" class="pv-stage" tabindex="-1" aria-label="Aperçu du livre">
+    <button id="pv-prev" type="button" class="pv-nav prev" aria-label="Pages précédentes" title="Pages précédentes">‹</button>
+    <div id="pv-spread" class="pv-spread"></div>
+    <button id="pv-next" type="button" class="pv-nav next" aria-label="Pages suivantes" title="Pages suivantes">›</button>
+  </div>
+  <p class="pv-hint mut">Feuilleter avec les flèches ← → (ou en balayant sur un téléphone) · Échap pour revenir</p>
+  <div id="pv-print-all" class="pv-print-all"></div>
+</div>
+<script src="js/layout-render.js" defer></script>
+<script src="js/book-plan.js" defer></script>
+<script src="js/preview.js" defer></script>
+
+    </main>
+  </div>
+
+  
+  <dialog id="confirmation" class="modale" aria-labelledby="confirmation-titre">
+    <h2 id="confirmation-titre">Êtes-vous sûr ?</h2>
+    <p id="confirmation-texte"></p>
+    <div class="actions">
+      <button type="button" class="btn sec" data-reponse="non" autofocus>Non, annuler</button>
+      <button type="button" class="btn" data-reponse="oui">Oui</button>
+    </div>
+  </dialog>
+
+  
+  <dialog id="saisie" class="modale" aria-labelledby="saisie-titre">
+    <form id="saisie-form" method="dialog" autocomplete="off">
+      <h2 id="saisie-titre"></h2>
+      <label id="saisie-label" for="saisie-champ"></label>
+      <input id="saisie-champ" type="text" maxlength="200">
+      <div class="actions">
+        <button type="button" class="btn sec" data-reponse="non">Annuler</button>
+        <button type="submit" class="btn" data-reponse="oui">Valider</button>
+      </div>
+    </form>
+  </dialog>
+
+  
+  <script src="js/common.js"></script>
+</body>
+</html>

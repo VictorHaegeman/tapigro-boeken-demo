@@ -67,6 +67,21 @@
     return { warnings, errors };
   }
 
+  // Avertissements : les doublons (un même code sur plusieurs lignes, ex. une
+  // 2e feuille qui reprend les produits) sont RÉSUMÉS en une ligne — le
+  // détail reste dépliable ; les autres avertissements suivent tels quels.
+  function renderWarnings(warnings) {
+    const dup = warnings.filter((e) => e.key === 'importMsg.duplicate');
+    const others = warnings.filter((e) => e.key !== 'importMsg.duplicate');
+    let html = '';
+    if (dup.length) {
+      const codes = new Set(dup.map((e) => (e.params && e.params.code) || e.message));
+      const items = dup.map((e) => `<li>${esc(formatEntry(e))}</li>`).join('');
+      html += `<details class="detail-warning"><summary>${esc(t('imports.duplicatesSummary', { n: codes.size }))}</summary><ul>${items}</ul></details>`;
+    }
+    return html + renderDetails(t('imports.warnings'), others.map(formatEntry), 'warning');
+  }
+
   function formatEntry(e) {
     if (e.sheet) return t('imports.sheetRow', { sheet: e.sheet, row: e.row, message: entryText(e) });
     if (e.key && e.file) return t('imports.fileReason', { file: e.file, reason: entryText(e) });
@@ -93,13 +108,13 @@
         .map((it) => {
           const { warnings, errors } = splitWarnings(it.errors);
           const detail =
-            renderDetails(t('imports.warnings'), warnings.map(formatEntry), 'warning') +
+            renderWarnings(warnings) +
             renderDetails(t('imports.errors'), errors.map(formatEntry), 'error');
           return `<tr>
             <td title="${esc(it.startedAt)}">${esc(window.App.formatDate(it.startedAt))}</td>
             <td>${esc(it.username)}</td>
             <td>${esc(it.kind === 'excel' ? t('imports.kindExcel') : it.kind === 'images' ? t('imports.kindImages') : it.kind)}</td>
-            <td>${esc(it.fileName)}</td>
+            <td>${esc(window.App.importFileName(it.fileName))}</td>
             <td>${it.created}</td>
             <td>${it.updated}</td>
             <td>${it.unchanged}</td>
@@ -147,7 +162,7 @@
             [t('imports.skipped'), r.skippedManual || 0],
             [t('imports.deactivated'), r.deactivated],
           ]) +
-            renderDetails(t('imports.warnings'), warnings.map(formatEntry), 'warning') +
+            renderWarnings(warnings) +
             renderDetails(t('imports.errors'), errors.map(formatEntry), 'error'),
           errors.length === 0
         );

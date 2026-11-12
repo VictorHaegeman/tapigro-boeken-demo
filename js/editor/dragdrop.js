@@ -6,8 +6,10 @@
  *    et inter-pages, insertion ENTRE deux items, l'ordre DOM fait foi) ;
  *  - les pages fixes n'ont pas de Sortable : aucun drop possible.
  *
- * Page pleine → put refusé (refus visuel, classe .drop-refused) ; le serveur
- * renvoie de toute façon 409 PAGE_FULL.
+ * Page pleine : le dépôt est ACCEPTÉ — entre deux articles, le dernier
+ * article de la page glisse vers la page de produits suivante (cascade côté
+ * serveur, réponse `shifted`) ; « à la suite », l'article ouvre la page
+ * suivante. Seul un relâcher hors de la grille est annulé.
  *
  * Emplacements libres : chaque grille de page contient, APRÈS ses cellules,
  * des cases vides en pointillés (.lr-empty, écran uniquement — elles
@@ -168,6 +170,9 @@
       group: { name: GROUP, pull: 'clone', put: false },
       sort: false,
       draggable: '.prod-entry',
+      // Le bouton « + Toevoegen » d'un produit se clique, il ne se glisse pas.
+      filter: '.prod-add',
+      preventOnFilter: false,
       forceFallback: true, // fiable avec les pages mises à l'échelle (transform: scale)
       fallbackOnBody: true,
       onMove: handleMove,
@@ -182,8 +187,9 @@
     return { x: t.clientX, y: t.clientY };
   }
 
-  // Applique dropVerdict à un événement onAdd de SortableJS.
-  function verdictFor(evt, capacity) {
+  // Applique dropVerdict à un événement onAdd de SortableJS. capacity =
+  // Infinity : une page pleine accepte le dépôt (cascade côté serveur).
+  function verdictFor(evt, capacity = Infinity) {
     const { x, y } = pointerOf(evt);
     if (typeof x !== 'number' || Number.isNaN(x)) return 'ok'; // pas de pointeur : le serveur tranchera
     // Seuls les items comptent (ni l'élément déposé, ni les cases vides).
@@ -197,22 +203,13 @@
   }
 
   // Rend une grille de page de contenu triable.
-  // handlers = {capacity(), onInsert({pageId, productId, beforeItemId, el}),
+  // handlers = {onInsert({pageId, productId, beforeItemId, el}),
   //             onMove({itemId, pageId, beforeItemId}),
-  //             onRefused('outside'|'full') — drop annulé au relâchement}
+  //             onRefused('outside') — relâché hors de la grille}
   function initPageGrid(gridEl, pageId, handlers) {
     return new Sortable(gridEl, {
-      group: {
-        name: GROUP,
-        pull: true,
-        // Page pleine → drop refusé visuellement (et 409 côté serveur).
-        put: (to, from, dragEl) => {
-          if (dragEl.classList.contains('lr-cell') && from.el === to.el) return true;
-          const full = cellCount(to.el) >= handlers.capacity();
-          to.el.closest('.lr-page').classList.toggle('drop-refused', full);
-          return !full;
-        },
-      },
+      // Toutes les pages de produits acceptent le dépôt, même pleines.
+      group: { name: GROUP, pull: true, put: true },
       animation: 120,
       // Les cases vides sont des CIBLES de dépôt (SortableJS ne réagit qu'au
       // survol d'éléments « draggable ») mais ne se déplacent pas (filter).
@@ -225,7 +222,7 @@
       onAdd(evt) {
         // Un groupe voisin traversé ne doit jamais adopter le drop : on
         // vérifie la grille sous le pointeur ET sa capacité au relâchement.
-        const verdict = verdictFor(evt, handlers.capacity());
+        const verdict = verdictFor(evt);
         if (verdict !== 'ok') {
           evt.item.remove(); // clone retiré ; un vrai item sera re-rendu depuis l'état
           if (handlers.onRefused) handlers.onRefused(verdict);
