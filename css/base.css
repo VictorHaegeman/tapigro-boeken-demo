@@ -1,0 +1,490 @@
+/* Tapigro Boeken — socle UI commun (refonte UX, docs/UX-REFONTE.md).
+   Charte : un seul accent (bordeaux Tapigro #4d2527), fond clair, menu latéral
+   fixe, composants calqués sur la plateforme Agricert (cards, toolbar, pills,
+   boutons, flash, modales). La fonte Liberation Sans est la même que celle
+   embarquée dans les PDF (public/assets/fonts) : aperçu et impression
+   partagent les métriques. */
+@font-face {
+  font-family: "Liberation Sans";
+  src: url("../assets/fonts/LiberationSans-Regular.ttf") format("truetype");
+  font-weight: 400;
+}
+@font-face {
+  font-family: "Liberation Sans";
+  src: url("../assets/fonts/LiberationSans-Bold.ttf") format("truetype");
+  font-weight: 700;
+}
+@font-face {
+  font-family: "Liberation Sans";
+  src: url("../assets/fonts/LiberationSans-Italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+}
+
+:root {
+  --ink: #1c2430;
+  --muted: #5b6370;
+  --line: #d4dae2;
+  --bg: #ffffff;
+  --card: #ffffff;
+  --accent: #4d2527; /* bordeaux Tapigro (mesuré sur THE_ONE.pdf) */
+  --accent-hover: #6a3438; /* état hover/actif dérivé */
+  --danger: #b3261e;
+  /* Teintes dérivées du bordeaux (équivalents de --alt/--lg d'Agricert). */
+  --alt: #f7f4f4; /* fond du menu, lignes paires */
+  --lg: #f1e7e7; /* survol / item actif */
+  /* Tokens sémantiques (statuts, flash). */
+  --ok-bg: #e3f0e4; --ok: #2e5d34;
+  --warn-bg: #fbf1dc; --warn: #8a6d1f;
+  --err-bg: #f6e4e2; --err: #9e2b25;
+  --info-bg: #e6eef6; --info: #2d5b86;
+}
+
+* { box-sizing: border-box; }
+/* L'attribut hidden doit gagner sur les display: posés par les classes
+   (.btn inline-block, .actions flex…) — sinon un bouton masqué pour les
+   viewers resterait visible. */
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  font-family: "Liberation Sans", Arial, Helvetica, sans-serif;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--bg);
+}
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---- squelette : menu latéral + contenu --------------------------------- */
+
+#app { display: flex; min-height: 100vh; }
+
+aside#menu {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--alt);
+  border-right: 1px solid var(--line);
+  padding: 18px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 10px 16px;
+  text-decoration: none;
+  color: var(--accent);
+}
+.logo-img { width: 34px; height: 34px; object-fit: contain; }
+.logo-txt { font-weight: 700; font-size: 17px; line-height: 1.1; }
+.logo-txt small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+aside#menu nav { display: flex; flex-direction: column; }
+aside#menu nav a {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--muted);
+  text-decoration: none;
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+aside#menu nav a.on { background: var(--lg); color: var(--accent); font-weight: 700; }
+aside#menu nav a:hover:not(.on) { background: #efeaea; }
+
+.qui {
+  margin-top: auto;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 10px;
+  line-height: 1.6;
+}
+.qui-nom { font-weight: 700; color: var(--ink); }
+.qui-nom::after { content: " · "; font-weight: 400; color: var(--muted); }
+.qui-role { display: inline; }
+.qui .lien { display: block; padding: 0; }
+
+/* Bouton déguisé en lien (déconnexion, actions discrètes). */
+button.lien {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+main.container {
+  flex: 1;
+  min-width: 0;
+  max-width: 1200px;
+  padding: 26px 30px;
+}
+main.container.plein { margin: 0 auto; }
+
+/* Page éditeur : plein écran. L'app occupe exactement la fenêtre et l'éditeur
+   remplit la place restante (pas de 100vh en dur dans l'éditeur : en écran
+   étroit le menu passe AU-DESSUS et s'ajouterait à la hauteur → double
+   défilement). */
+body[data-page="editor"] #app { height: 100vh; height: 100dvh; min-height: 0; }
+body[data-page="editor"] main.container { max-width: none; padding: 0; min-height: 0; }
+
+/* Icône de déconnexion : visible seulement dans le rail compact de l'éditeur. */
+.qui .lien .ico { display: none; }
+
+/* Écran large uniquement : le menu se replie en rail d'icônes (place aux
+   pages). Sous 761 px c'est le bloc responsive du bas (barre horizontale avec
+   libellés) qui s'applique, sans être contrarié par ces règles. */
+@media (min-width: 761px) {
+  body[data-page="editor"] aside#menu { width: 56px; padding: 14px 8px; }
+  body[data-page="editor"] aside#menu .logo { padding: 2px 0 14px; justify-content: center; }
+  /* Le logo (mot-symbole large) est illisible à 28 px : monogramme à la place. */
+  body[data-page="editor"] aside#menu .logo-img,
+  body[data-page="editor"] aside#menu .logo-txt,
+  body[data-page="editor"] aside#menu .lbl { display: none; }
+  body[data-page="editor"] aside#menu .logo::before {
+    content: "T";
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 700;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  body[data-page="editor"] aside#menu nav a { justify-content: center; padding: 10px 6px; }
+  body[data-page="editor"] .qui { padding: 6px 0; text-align: center; }
+  body[data-page="editor"] .qui-nom,
+  body[data-page="editor"] .qui-role { display: none; }
+  /* « Se déconnecter » débordait du rail : icône seule (title = infobulle). */
+  body[data-page="editor"] .qui .lien { text-decoration: none; width: 100%; padding: 8px 0; border-radius: 8px; }
+  body[data-page="editor"] .qui .lien:hover { background: #efeaea; }
+  body[data-page="editor"] .qui .lien .ico { display: inline; font-size: 17px; }
+}
+
+/* ---- titres, en-têtes de page -------------------------------------------- */
+
+h1 { font-size: 21px; color: var(--accent); margin: 0 0 4px; }
+h2 { font-size: 16px; color: var(--accent); margin: 0 0 12px; }
+h3 { font-size: 13.5px; margin: 4px 0 8px; }
+.sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+
+/* h1 + bouton principal à droite. */
+.entete {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.retour { font-size: 13px; text-decoration: none; color: var(--muted); }
+.retour:hover { color: var(--accent); }
+
+/* ---- cartes-compteurs cliquables ----------------------------------------- */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.card {
+  background: var(--alt);
+  border-radius: 10px;
+  padding: 12px 16px;
+  text-decoration: none;
+  color: inherit;
+  display: block;
+  border: 0;
+}
+a.card:hover, button.card:hover { background: var(--lg); }
+button.card { font: inherit; text-align: left; cursor: pointer; width: 100%; }
+.card .l { font-size: 12.5px; color: var(--muted); display: block; }
+.card .v { font-size: 24px; font-weight: 700; color: var(--accent); margin-top: 2px; font-variant-numeric: tabular-nums; display: block; }
+.card .t { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.card.a-faire { background: var(--warn-bg); }
+.card.a-faire .v { color: var(--warn); }
+.card.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ---- toolbar (recherche + filtres) ---------------------------------------- */
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  align-items: center;
+}
+input, select, textarea {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent-hover); outline-offset: -1px; }
+input[type="search"] { min-width: 240px; flex: 1; max-width: 380px; }
+.count { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+
+/* ---- tableaux --------------------------------------------------------------- */
+
+.tablewrap { overflow-x: auto; border-radius: 8px; }
+table.table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.table th {
+  text-align: left;
+  color: #fff;
+  background: var(--accent);
+  padding: 9px 10px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.table th button.tri {
+  background: none; border: 0; padding: 0; font: inherit; color: #fff; cursor: pointer;
+}
+.table th button.tri.on::after { content: " ▾"; }
+.table td { padding: 8px 10px; border-bottom: 1px solid #efe9e9; vertical-align: middle; }
+.table tr:nth-child(even) td { background: var(--alt); }
+.table tbody tr.lien { cursor: pointer; }
+.table tbody tr.lien:hover td { background: var(--lg); }
+.table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.muted, .mut { color: var(--muted); }
+
+/* ---- pastilles de statut ----------------------------------------------------- */
+
+.pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pill.s-actif { background: var(--ok-bg); color: var(--ok); }
+.pill.s-retire, .pill.s-inactif { background: #ececec; color: #666; }
+.pill.s-attention { background: var(--warn-bg); color: var(--warn); }
+.tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  background: var(--lg);
+  color: var(--accent);
+  margin-right: 3px;
+  white-space: nowrap;
+}
+.tag.warn { background: var(--warn-bg); color: var(--warn); }
+.tag.err { background: var(--err-bg); color: var(--err); }
+
+/* ---- boutons ------------------------------------------------------------------ */
+
+button { font: inherit; cursor: pointer; }
+.btn {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+.btn:hover { background: var(--accent-hover); }
+.btn.sec { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+.btn.sec:hover { background: var(--lg); }
+.btn.petit { padding: 4px 10px; font-size: 12.5px; }
+.btn.rouge { background: var(--err); color: #fff; border: 0; }
+.btn.rouge:hover { background: #7f211c; }
+.btn[disabled], .btn.off { opacity: 0.45; cursor: not-allowed; }
+.btn[disabled]:hover { background: var(--accent); }
+.btn.sec[disabled]:hover { background: #fff; }
+
+/* ---- pagination ----------------------------------------------------------------- */
+
+.pager { display: flex; gap: 6px; justify-content: center; margin: 16px 0; align-items: center; }
+.pager button, .pager span {
+  padding: 5px 11px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--accent);
+  font: inherit;
+}
+.pager span.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pager button[disabled] { opacity: 0.4; cursor: default; }
+
+/* ---- messages (flash / toasts) --------------------------------------------------- */
+
+#flash { position: sticky; top: 8px; z-index: 50; }
+.flash {
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.08);
+}
+.flash .texte { flex: 1; }
+.flash.ok { background: var(--ok-bg); color: var(--ok); }
+.flash.erreur { background: var(--err-bg); color: var(--err); }
+.flash.info { background: var(--info-bg); color: var(--info); }
+.flash .fermer {
+  background: none; border: 0; padding: 0 2px; font-size: 16px; line-height: 1;
+  color: inherit; cursor: pointer; flex: none;
+}
+
+/* ---- panneaux, formulaires -------------------------------------------------------- */
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  background: var(--card);
+}
+.panel.alerte { border-color: #e8d3a0; background: #fffbf2; }
+.panel .entete h2 { margin: 0; }
+.panel .entete { margin-bottom: 12px; align-items: center; }
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px 16px;
+}
+.form label, .champ {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.form label.large { grid-column: 1 / -1; }
+.form input, .form select { color: var(--ink); font-size: 14px; }
+.form input[readonly], .form input[disabled] { background: var(--alt); border-color: transparent; }
+.actions { display: flex; gap: 8px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
+
+.vide { color: var(--muted); font-style: italic; }
+.note {
+  background: var(--info-bg);
+  color: var(--info);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.error { color: var(--danger); font-size: 0.95em; }
+
+/* ---- modales (confirmation, saisie, création) -------------------------------------- */
+
+dialog.modale {
+  border: 0;
+  border-radius: 16px;
+  padding: 22px 24px;
+  max-width: 440px;
+  width: calc(100% - 32px);
+  box-shadow: 0 20px 50px rgba(20, 30, 60, 0.25);
+  color: var(--ink);
+}
+dialog.modale.large { max-width: 640px; }
+dialog.modale::backdrop { background: rgba(20, 30, 40, 0.45); }
+dialog.modale h2 { color: var(--ink); margin: 0 0 8px; }
+dialog.modale p { margin: 0 0 6px; line-height: 1.5; }
+dialog.modale .actions { justify-content: flex-end; }
+dialog.modale label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); margin: 8px 0; }
+dialog.modale input, dialog.modale select { width: 100%; }
+
+/* Choix d'un format (fenêtre « Nouveau boek ») : cartes radio avec mini-page. */
+dialog.modale fieldset.choix-format { border: 0; padding: 0; margin: 10px 0 4px; }
+dialog.modale fieldset.choix-format legend { font-size: 12.5px; color: var(--muted); padding: 0; margin-bottom: 6px; }
+.formats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+dialog.modale label.format {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  position: relative;
+}
+dialog.modale label.format:hover { background: var(--alt); }
+dialog.modale label.format:has(input:checked) { border-color: var(--accent); background: var(--lg); box-shadow: inset 0 0 0 1px var(--accent); }
+dialog.modale label.format input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+dialog.modale label.format:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mini-page {
+  flex: none;
+  width: 46px;
+  height: 65px; /* proportion A4 */
+  background: #fff;
+  border: 1px solid #bdb3b3;
+  border-radius: 2px;
+  padding: 4px;
+  display: grid;
+  gap: 2px;
+}
+.mini-page i { background: var(--accent); opacity: 0.55; border-radius: 1px; }
+.format-txt { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; }
+.format-txt strong { color: var(--ink); font-size: 13.5px; }
+dialog.modale label.case {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 12px 0 4px;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+dialog.modale label.case input { width: auto; margin-top: 2px; flex: none; }
+@media (max-width: 560px) { .formats { grid-template-columns: 1fr; } }
+
+/* ---- page de connexion --------------------------------------------------------------- */
+
+.login {
+  max-width: 360px;
+  margin: 12vh auto 0;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+.login .logo { padding: 0 0 18px; }
+.login label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+.login .btn { width: 100%; padding: 11px; margin-top: 4px; }
+.login .aide { font-size: 12px; color: var(--muted); margin: 14px 0 0; }
+
+/* ---- responsive ------------------------------------------------------------------------ */
+
+@media (max-width: 760px) {
+  #app { flex-direction: column; }
+  aside#menu {
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 10px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  aside#menu .logo { padding: 0 8px 0 0; }
+  aside#menu .logo-txt small { display: none; }
+  aside#menu nav { flex-direction: row; gap: 2px; flex-wrap: wrap; }
+  aside#menu nav a { padding: 8px 10px; }
+  aside#menu nav a .ico { display: none; }
+  .qui { margin: 0 0 0 auto; padding: 0; }
+  main.container { padding: 18px 16px; }
+  input[type="search"] { min-width: 0; max-width: none; flex-basis: 100%; }
+}

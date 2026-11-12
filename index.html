@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tableau de bord — Tapigro Boeken</title>
+  <link rel="stylesheet" href="css/base.css">
+  
+  
+  <link rel="stylesheet" href="css/products.css">
+  <link rel="icon" href="assets/logo-tapigro.png">
+  <link rel="stylesheet" href="demo/demo.css">
+  <script src="demo/shared.js"></script>
+  <script src="data/catalog.js"></script>
+  <script src="demo/urls.js"></script>
+  <script src="demo/backend.js"></script>
+  <script src="demo/demo.js"></script>
+</head>
+<body data-page="home">
+  <div id="app">
+    
+    <aside id="menu">
+      <a class="logo" href="index.html" title="Tapigro Boeken — tableau de bord">
+        <img src="assets/logo-tapigro.png" alt="Tapigro" class="logo-img">
+        <span class="logo-txt">Boeken<small>catalogues &amp; étiquettes</small></span>
+      </a>
+      <nav>
+        <a href="index.html" class="on" title="Tableau de bord"><span class="ico">🏠</span><span class="lbl">Tableau de bord</span></a>
+        <a href="products.html" class="" title="Produits"><span class="ico">📦</span><span class="lbl">Produits</span></a>
+        <a href="books.html" class="" title="Boeken"><span class="ico">📚</span><span class="lbl">Boeken</span></a>
+        
+        <a href="imports.html" class="" title="Imports"><span class="ico">⬆️</span><span class="lbl">Imports</span></a>
+        <a href="users.html" class="" title="Utilisateurs"><span class="ico">👤</span><span class="lbl">Utilisateurs</span></a>
+        
+      </nav>
+      <div class="qui">
+        <span class="qui-nom">Démo</span>
+        <span class="qui-role">Administrateur</span>
+        <button id="logout-btn" type="button" class="lien" title="Se déconnecter"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Se déconnecter</span></button>
+      </div>
+    </aside>
+    
+    <main class="container">
+      <div id="flash" aria-live="polite"></div>
+      <div class="entete">
+  <h1>Bonjour, Démo</h1>
+  <a id="home-new-book" class="btn" href="books.html" hidden>+ Nouveau boek</a>
+</div>
+<p class="sub">Un boek est un catalogue ou un livret d'étiquettes prêt à imprimer :
+créez-en un, glissez-y des produits, puis exportez-le en PDF. Cliquez sur une carte pour voir le détail.</p>
+
+<div class="panel" id="home-products">
+  <div class="entete"><h2>📦 Produits</h2><a href="products.html">Voir le catalogue →</a></div>
+  <div class="cards" id="home-products-cards"></div>
+</div>
+
+<div class="panel" id="home-books">
+  <div class="entete"><h2>📚 Boeken</h2><a href="books.html">Voir les boeken →</a></div>
+  <div class="cards" id="home-books-cards"></div>
+  <h3>Reprendre mon travail</h3>
+  <div class="tablewrap">
+    <table class="table" id="home-books-table" hidden>
+      <thead><tr><th>Nom</th><th>Modèle</th><th>Produits</th><th>Modifié</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="vide" id="home-books-empty" hidden>Vous n'avez pas encore de boek.
+    Cliquez sur « + Nouveau boek » pour commencer.</p>
+</div>
+
+<div class="panel" id="home-recent">
+  <div class="entete"><h2>🕘 Dernières modifications</h2></div>
+  <div class="tablewrap">
+    <table class="table" id="home-recent-table" hidden>
+      <thead><tr><th>Type</th><th>Quoi</th><th>Modifié</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="vide" id="home-recent-empty" hidden>Aucune modification pour l'instant.</p>
+</div>
+
+<div class="panel" id="home-imports" hidden>
+  <div class="entete"><h2>⬆️ Imports</h2><a href="imports.html">Importer des données →</a></div>
+  <div class="cards" id="home-imports-cards"></div>
+  <p class="vide" id="home-imports-empty" hidden>Aucun import pour l'instant.
+    Importez votre export Excel Optedo pour remplir le catalogue.</p>
+</div>
+
+<script src="js/home.js" defer></script>
+
+    </main>
+  </div>
+
+  
+  <dialog id="confirmation" class="modale" aria-labelledby="confirmation-titre">
+    <h2 id="confirmation-titre">Êtes-vous sûr ?</h2>
+    <p id="confirmation-texte"></p>
+    <div class="actions">
+      <button type="button" class="btn sec" data-reponse="non" autofocus>Non, annuler</button>
+      <button type="button" class="btn" data-reponse="oui">Oui</button>
+    </div>
+  </dialog>
+
+  
+  <dialog id="saisie" class="modale" aria-labelledby="saisie-titre">
+    <form id="saisie-form" method="dialog" autocomplete="off">
+      <h2 id="saisie-titre"></h2>
+      <label id="saisie-label" for="saisie-champ"></label>
+      <input id="saisie-champ" type="text" maxlength="200">
+      <div class="actions">
+        <button type="button" class="btn sec" data-reponse="non">Annuler</button>
+        <button type="submit" class="btn" data-reponse="oui">Valider</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="js/common.js"></script>
+</body>
+</html>

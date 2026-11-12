@@ -1,0 +1,85 @@
+/* Page /imports — complète base.css (cartes, tables, formulaires). */
+
+.imports-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+@media (max-width: 800px) {
+  .imports-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.imports-grid .hint,
+#imports-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.imports-grid input[type='file'] {
+  display: block;
+  margin: 8px 0 12px;
+}
+
+.checkbox-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.checkbox-row input[type='checkbox'] {
+  margin-top: 2px;
+  flex: none;
+}
+
+.import-result {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--muted);
+  border-radius: 4px;
+  background: var(--bg);
+  font-size: 0.95rem;
+}
+.import-result.import-result-ok {
+  border-left-color: var(--accent);
+}
+
+.import-result details,
+#imports-table details {
+  margin-top: 6px;
+}
+.import-result summary,
+#imports-table summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+/* Avertissements (doublons : comportement normal des exports) : neutre.
+   Vraies erreurs : rouge. */
+details.detail-warning > summary {
+  color: var(--muted);
+}
+details.detail-error > summary {
+  color: var(--danger);
+  font-weight: 700;
+}
+.import-result ul,
+#imports-table ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  max-height: 220px;
+  overflow: auto;
+  font-size: 0.85rem;
+}
+
+#imports-table td {
+  vertical-align: top;
+}
+
+.imports-pager {
+  margin-top: 12px;
+  text-align: center;
+}
