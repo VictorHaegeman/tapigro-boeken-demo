@@ -1,6 +1,6 @@
 /* demo/shared.js — GÉNÉRÉ par scripts/build-demo.js, ne pas modifier.
  * Code du serveur réutilisé tel quel dans la démo statique :
- * server/middleware/errors.js, server/middleware/validate.js, server/services/productRules.js, server/services/layouts.js, server/services/pdf/document.js, server/services/pdf/fonts.js. */
+ * server/middleware/errors.js, server/middleware/validate.js, server/services/productRules.js, server/services/layouts.js, shared/i18n/i18n.js, server/services/pdf/document.js, server/services/pdf/fonts.js. */
 (function (global) {
   'use strict';
   function norm(p) {
@@ -31,12 +31,24 @@
 // Gestion d'erreur unifiée : toute erreur sort en JSON {error: {code, message}}.
 // En production les erreurs 5xx ne divulguent ni message interne ni stack.
 
+// `message` : texte technique (anglais, journaux et tests) ; `i18n` : clé de
+// traduction (« apiErrors.pageFull ») ou {key, params} — le message renvoyé à
+// l'utilisateur est traduit dans SA langue par errorHandler. Sans clé, le
+// message générique du code (apiErrors.<CODE>) est utilisé.
 class HttpError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, i18n) {
     super(message);
     this.status = status;
     this.code = code;
+    if (i18n) this.i18n = typeof i18n === 'string' ? { key: i18n } : i18n;
   }
+}
+
+// Message d'erreur dans la langue de la requête.
+function translateError(err, code, t, has) {
+  if (err.i18n && err.i18n.key) return t(err.i18n.key, err.i18n.params);
+  if (has(`apiErrors.${code}`)) return t(`apiErrors.${code}`);
+  return null;
 }
 
 function notFound(req, res, next) {
@@ -53,7 +65,9 @@ function prefersHtmlPage(req) {
   return req.accepts(['json', 'html']) === 'html';
 }
 
-function errorHandler(config) {
+// i18n : server/i18n.js (injecté par app.js — ce module reste sans dépendance,
+// il est aussi utilisé tel quel par la démo statique).
+function errorHandler(config, i18n) {
   // eslint-disable-next-line no-unused-vars
   return (err, req, res, next) => {
     const status = Number.isInteger(err.status) ? err.status : 500;
@@ -63,13 +77,19 @@ function errorHandler(config) {
       console.error(err);
       if (config.env === 'production') message = 'Internal server error';
     }
+    // Traduction (langue de la requête ; avant le middleware de langue, celle
+    // du .env). En développement, une 5xx garde son détail technique.
+    const t = req.t || (i18n ? i18n.translator(config.lang) : (k) => k);
+    if (i18n && !(status >= 500 && config.env !== 'production')) {
+      message = translateError(err, code, t, i18n.has) || message;
+    }
     if (res.headersSent) return;
     const sendJson = () => res.status(status).json({ error: { code, message } });
     if (prefersHtmlPage(req)) {
       // render() avec callback : si la vue échoue, on retombe sur le JSON.
       return res.status(status).render(
         'layout',
-        { title: `Erreur ${status}`, page: 'error', status, code, message },
+        { title: t('error.titleOther', { status }), page: 'error', status, code, message },
         (renderErr, html) => {
           if (renderErr) {
             console.error(renderErr);
@@ -83,7 +103,7 @@ function errorHandler(config) {
   };
 }
 
-module.exports = { HttpError, notFound, errorHandler };
+module.exports = { HttpError, notFound, errorHandler, translateError };
 
 },
 "server/middleware/validate.js": function (module, exports, require) {
@@ -100,37 +120,41 @@ module.exports = { HttpError, notFound, errorHandler };
 //   integer/number : min, max
 const { HttpError } = require('./errors');
 
-function fail(message) {
-  return new HttpError(400, 'VALIDATION', message);
+// Erreur de validation : message technique (anglais) + clé traduite pour
+// l'utilisateur (validation.<règle>, paramètres {field, min, max, values}).
+function fail(message, rule, params) {
+  return new HttpError(400, 'VALIDATION', message, rule ? { key: `validation.${rule}`, params } : undefined);
 }
 
 function coerce(key, value, rule) {
   switch (rule.type) {
     case 'string': {
-      if (typeof value !== 'string') throw fail(`${key} must be a string`);
+      if (typeof value !== 'string') throw fail(`${key} must be a string`, 'string', { field: key });
       if (rule.trim !== false) value = value.trim();
       const maxLength = rule.maxLength ?? 500;
-      if (value.length > maxLength) throw fail(`${key} must be at most ${maxLength} characters`);
-      if (rule.minLength && value.length < rule.minLength) {
-        throw fail(`${key} must be at least ${rule.minLength} characters`);
+      if (value.length > maxLength) {
+        throw fail(`${key} must be at most ${maxLength} characters`, 'maxLength', { field: key, max: maxLength });
       }
-      if (rule.pattern && !rule.pattern.test(value)) throw fail(`${key} has an invalid format`);
+      if (rule.minLength && value.length < rule.minLength) {
+        throw fail(`${key} must be at least ${rule.minLength} characters`, 'minLength', { field: key, min: rule.minLength });
+      }
+      if (rule.pattern && !rule.pattern.test(value)) throw fail(`${key} has an invalid format`, 'format', { field: key });
       return value;
     }
     case 'integer':
     case 'number': {
       const n = typeof value === 'number' ? value : Number(String(value));
-      if (!Number.isFinite(n)) throw fail(`${key} must be a number`);
-      if (rule.type === 'integer' && !Number.isInteger(n)) throw fail(`${key} must be an integer`);
-      if (rule.min !== undefined && n < rule.min) throw fail(`${key} must be >= ${rule.min}`);
-      if (rule.max !== undefined && n > rule.max) throw fail(`${key} must be <= ${rule.max}`);
+      if (!Number.isFinite(n)) throw fail(`${key} must be a number`, 'number', { field: key });
+      if (rule.type === 'integer' && !Number.isInteger(n)) throw fail(`${key} must be an integer`, 'integer', { field: key });
+      if (rule.min !== undefined && n < rule.min) throw fail(`${key} must be >= ${rule.min}`, 'min', { field: key, min: rule.min });
+      if (rule.max !== undefined && n > rule.max) throw fail(`${key} must be <= ${rule.max}`, 'max', { field: key, max: rule.max });
       return n;
     }
     case 'boolean': {
       if (typeof value === 'boolean') return value;
       if (value === 'true' || value === '1' || value === 1) return true;
       if (value === 'false' || value === '0' || value === 0) return false;
-      throw fail(`${key} must be a boolean`);
+      throw fail(`${key} must be a boolean`, 'boolean', { field: key });
     }
     default:
       throw new Error(`validate: unknown type for ${key}`);
@@ -145,13 +169,16 @@ function validate(schema, source = 'body') {
       for (const [key, rule] of Object.entries(schema)) {
         const raw = data[key];
         if (raw === undefined || raw === null || raw === '') {
-          if (rule.required) throw fail(`${key} is required`);
+          if (rule.required) throw fail(`${key} is required`, 'required', { field: key });
           if ('default' in rule) out[key] = rule.default;
           continue;
         }
         const value = coerce(key, raw, rule);
         if (rule.enum && !rule.enum.includes(value)) {
-          throw fail(`${key} must be one of: ${rule.enum.join(', ')}`);
+          throw fail(`${key} must be one of: ${rule.enum.join(', ')}`, 'enum', {
+            field: key,
+            values: rule.enum.join(', '),
+          });
         }
         out[key] = value;
       }
@@ -305,6 +332,87 @@ function hasFixedPages(layout) {
 }
 
 module.exports = { loadLayouts, loadLayout, resolveFixedPages, layoutSlots, hasFixedPages };
+
+},
+"shared/i18n/i18n.js": function (module, exports, require) {
+/* i18n.js — traduction de Tapigro Boeken (FR / NL), sans dépendance.
+ *
+ * Dictionnaires : shared/i18n/<langue>.json (mêmes clés dans chaque langue —
+ * vérifié par tests/a/i18n.test.js). Une valeur est
+ *   - une chaîne avec paramètres « {nom} » : "Pagina {n}" ;
+ *   - ou un objet de pluriel {"one": "…", "other": "…"} choisi par params.n.
+ * Clé absente dans la langue → langue de secours (nl) → la clé elle-même
+ * (visible, donc repérable, jamais d'exception).
+ *
+ * Module UMD : serveur (server/i18n.js, vues EJS, messages d'API) et client
+ * (servi avec le dictionnaire par GET /i18n/<langue>.js → window.TapigroI18n).
+ */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.TapigroI18nCore = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const LANGS = ['nl', 'fr'];
+  const DEFAULT_LANG = 'nl';
+  // Formats de dates et de nombres : Belgique.
+  const LOCALES = { nl: 'nl-BE', fr: 'fr-BE' };
+
+  function isLang(value) {
+    return LANGS.includes(value);
+  }
+
+  function lookup(dict, key) {
+    let node = dict;
+    for (const part of String(key).split('.')) {
+      if (node === null || typeof node !== 'object' || !(part in node)) return undefined;
+      node = node[part];
+    }
+    return node;
+  }
+
+  function interpolate(template, params) {
+    return String(template).replace(/\{(\w+)\}/g, (m, name) =>
+      params && params[name] !== undefined && params[name] !== null ? String(params[name]) : m
+    );
+  }
+
+  /**
+   * @param {object} dict dictionnaire de la langue
+   * @param {object} [fallback] dictionnaire de secours
+   * @returns {(key: string, params?: object) => string}
+   */
+  function createTranslator(dict, fallback) {
+    return function t(key, params) {
+      let value = lookup(dict, key);
+      if (value === undefined && fallback) value = lookup(fallback, key);
+      if (value === undefined) return key;
+      if (value && typeof value === 'object') {
+        // Pluriel : « one » pour 1 (et 0 en français, comme l'usage).
+        const n = params ? Number(params.n) : NaN;
+        const lang = lookup(dict, '_lang') || DEFAULT_LANG;
+        const one = n === 1 || (lang === 'fr' && n === 0);
+        value = one && value.one !== undefined ? value.one : value.other;
+        if (value === undefined) return key;
+      }
+      return interpolate(value, params);
+    };
+  }
+
+  // Toutes les clés « a.b.c » d'un dictionnaire (objets de pluriel = une clé).
+  function flattenKeys(dict, prefix = '') {
+    const keys = [];
+    for (const [k, v] of Object.entries(dict)) {
+      const full = prefix ? `${prefix}.${k}` : k;
+      const isPlural = v && typeof v === 'object' && Object.keys(v).every((x) => x === 'one' || x === 'other');
+      if (v && typeof v === 'object' && !isPlural) keys.push(...flattenKeys(v, full));
+      else keys.push(full);
+    }
+    return keys;
+  }
+
+  return { LANGS, DEFAULT_LANG, LOCALES, isLang, createTranslator, interpolate, flattenKeys, lookup };
+});
 
 },
 "server/services/pdf/document.js": function (module, exports, require) {
@@ -782,6 +890,7 @@ module.exports = { drawProductPage };
   set("validate", load("server/middleware/validate.js"));
   set("productRules", load("server/services/productRules.js"));
   set("layouts", load("server/services/layouts.js"));
+  set("i18n", load("shared/i18n/i18n.js"));
   set("pdf.document", load("server/services/pdf/document.js"));
   set("pdf.fonts", load("server/services/pdf/fonts.js"));
   global.TapigroShared = out;

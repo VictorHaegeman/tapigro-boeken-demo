@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mes boeken — Tapigro Boeken</title>
+  <link rel="stylesheet" href="css/base.css">
+  
+  
+  
+  <link rel="icon" href="assets/logo-tapigro.png">
+  <link rel="stylesheet" href="demo/demo.css">
+  <script src="i18n/fr.js"></script>
+  <script src="demo/shared.js"></script>
+  <script src="data/catalog.js"></script>
+  <script src="demo/urls.js"></script>
+  <script src="demo/backend.js"></script>
+  <script src="demo/demo.js"></script>
+</head>
+<body data-page="books">
+  <div id="app">
+    
+    <aside id="menu">
+      <a class="logo" href="index.fr.html" title="Tapigro Boeken — tableau de bord">
+        <img src="assets/logo-tapigro.png" alt="Tapigro" class="logo-img">
+        <span class="logo-txt">Boeken<small>catalogues &amp; étiquettes</small></span>
+      </a>
+      <nav>
+        <a href="index.fr.html" class="" title="Tableau de bord"><span class="ico">🏠</span><span class="lbl">Tableau de bord</span></a>
+        <a href="products.fr.html" class="" title="Produits"><span class="ico">📦</span><span class="lbl">Produits</span></a>
+        <a href="books.fr.html" class="on" title="Boeken"><span class="ico">📚</span><span class="lbl">Boeken</span></a>
+        
+        <a href="imports.fr.html" class="" title="Imports"><span class="ico">⬆️</span><span class="lbl">Imports</span></a>
+        <a href="users.fr.html" class="" title="Utilisateurs"><span class="ico">👤</span><span class="lbl">Utilisateurs</span></a>
+        
+      </nav>
+      <div class="qui">
+        <span class="qui-nom">Démo</span>
+        <span class="qui-role">Administrateur</span>
+        <button id="logout-btn" type="button" class="lien" title="Se déconnecter"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Se déconnecter</span></button>
+        
+        <span class="langues" role="group" aria-label="Langue de l’application">
+          <button type="button" class="lien lang-btn" data-lang="nl" lang="nl" aria-pressed="false">NL</button><button type="button" class="lien lang-btn on" data-lang="fr" lang="fr" aria-pressed="true">FR</button>
+        </span>
+      </div>
+    </aside>
+    
+    <main class="container">
+      <div id="flash" aria-live="polite"></div>
+      <div class="entete">
+  <h1>Mes boeken</h1>
+  <button id="book-create-open" type="button" class="btn" hidden>+ Nouveau boek</button>
+</div>
+<p class="sub">Un boek est un catalogue ou un livret d’étiquettes prêt à imprimer : ouvrez-le pour y glisser des produits, puis exportez-le en PDF. Cliquez sur une ligne pour l’ouvrir.</p>
+
+<div class="toolbar">
+  <input type="search" id="books-search" placeholder="Nom du boek…" aria-label="Rechercher un boek">
+  <span class="count" id="books-count"></span>
+</div>
+
+<div class="tablewrap">
+  <table id="books-table" class="table">
+    <thead>
+      <tr><th>Nom</th><th>Modèle de mise en page</th><th class="num">Pages</th>
+          <th class="num">Produits</th><th>Modifié</th><th>Actions</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+<p id="books-empty" class="vide" hidden>Vous n’avez pas encore de boek. Cliquez sur « + Nouveau boek » pour commencer.</p>
+<p id="books-noresult" class="vide" hidden>Aucun boek ne porte ce nom.</p>
+
+<dialog id="book-create-dialog" class="modale large" aria-labelledby="book-create-titre">
+  <h2 id="book-create-titre">Nouveau boek</h2>
+  <form id="book-create-form" autocomplete="off">
+    <label for="nb-name">Nom
+      <input id="nb-name" name="name" type="text" required minlength="1" maxlength="200"
+             placeholder="ex. Catalogue peintres 2027">
+    </label>
+    <fieldset class="choix-format">
+      <legend>Format des pages de produits</legend>
+      <div id="nb-layouts" class="formats"></div>
+    </fieldset>
+    <label class="case" for="nb-fixed">
+      <input id="nb-fixed" name="fixedPages" type="checkbox" checked>
+      <span><strong>Avec couverture, page 2 et dos</strong><br>
+        <span class="mut">Trois pages fixes autour des produits : la couverture porte le nom du boek (vous pourrez modifier les textes). Décochez pour une simple planche d’étiquettes.</span></span>
+    </label>
+    <p id="book-create-error" class="error" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn sec" data-reponse="non">Annuler</button>
+      <button type="submit" class="btn">Créer et ouvrir</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="js/books.js" defer></script>
+
+    </main>
+  </div>
+
+  
+  <dialog id="confirmation" class="modale" aria-labelledby="confirmation-titre">
+    <h2 id="confirmation-titre">Êtes-vous sûr ?</h2>
+    <p id="confirmation-texte"></p>
+    <div class="actions">
+      <button type="button" class="btn sec" data-reponse="non" autofocus>Non, annuler</button>
+      <button type="button" class="btn" data-reponse="oui">Oui</button>
+    </div>
+  </dialog>
+
+  
+  <dialog id="saisie" class="modale" aria-labelledby="saisie-titre">
+    <form id="saisie-form" method="dialog" autocomplete="off">
+      <h2 id="saisie-titre"></h2>
+      <label id="saisie-label" for="saisie-champ"></label>
+      <input id="saisie-champ" type="text" maxlength="200">
+      <div class="actions">
+        <button type="button" class="btn sec" data-reponse="non">Annuler</button>
+        <button type="submit" class="btn" data-reponse="oui">Valider</button>
+      </div>
+    </form>
+  </dialog>
+
+  
+  <script src="js/common.js"></script>
+</body>
+</html>

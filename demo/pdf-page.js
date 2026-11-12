@@ -127,7 +127,7 @@
         const data = await win.App.api(`/api/books/${bookId}/pdf-data`);
         const { layouts } = await win.App.api('/api/layouts');
         const layout = layouts.find((l) => l.id === data.layoutId);
-        doc.getElementById('pdf-titre').textContent = `Export PDF — ${data.name}`;
+        doc.getElementById('pdf-titre').textContent = win.App.t('demo.pdfTitleBook', { name: data.name });
         const { chunks, pageCount } = await renderPdf({
           PDFDocument: win.PDFDocument,
           shared,
@@ -145,15 +145,13 @@
         const frame = doc.getElementById('pdf-apercu');
         frame.src = href;
         frame.hidden = false;
-        status.textContent =
-          `PDF prêt : ${pageCount} page${pageCount > 1 ? 's' : ''} A4, généré dans votre navigateur ` +
-          'par le même moteur que l’application. Téléchargez-le, ou imprimez-le depuis l’aperçu.';
+        status.textContent = win.App.t('demo.pdfReady', { n: pageCount });
         win.TapigroDemoPdf = { blob, pageCount }; // (tests de bout en bout)
       } catch (err) {
         status.textContent =
           err && err.status === 404
-            ? 'Ce boek n’existe pas (ou plus) dans cette démo.'
-            : `Le PDF n’a pas pu être généré : ${err && err.message ? err.message : err}`;
+            ? win.App.t('demo.pdfNotFound')
+            : win.App.t('demo.pdfFailed', { message: err && err.message ? err.message : String(err) });
         win.console.error(err);
       }
     });

@@ -13,14 +13,21 @@
  *   /img/CODE/photo    → data/images/<fichier> (manifeste du catalogue)
  *   /css/x, /assets/x… → css/x, assets/x…      /api/…          → inchangé (fetch simulé, demo.js)
  *
+ * Langues : les pages existent dans chaque langue — « products.html » dans la
+ * langue par défaut de la démo, « products.fr.html » pour l'autre. Les liens
+ * restent dans la langue de la page affichée.
+ *
  * Module UMD : utilisé au build (Node, rendu des vues) et dans le navigateur.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else {
     root.TapigroDemoUrls = factory();
-    const catalog = root.TapigroDemoCatalog;
-    root.TapigroUrlMap = root.TapigroDemoUrls.createUrlMap(catalog ? catalog.images : {});
+    const catalog = root.TapigroDemoCatalog || {};
+    root.TapigroUrlMap = root.TapigroDemoUrls.createUrlMap(catalog.images || {}, {
+      lang: root.document ? root.document.documentElement.lang : undefined,
+      defaultLang: catalog.defaultLang,
+    });
   }
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
@@ -33,21 +40,27 @@
    *   manifeste CODE (majuscules) → chemins relatifs des fichiers
    * @returns {(path: string) => string}
    */
-  function createUrlMap(images = {}) {
+  // « products.html » → « products.fr.html » hors langue par défaut.
+  function pageName(file, lang, defaultLang) {
+    return !lang || !defaultLang || lang === defaultLang ? file : file.replace(/\.html$/, `.${lang}.html`);
+  }
+
+  function createUrlMap(images = {}, { lang, defaultLang } = {}) {
+    const page = (file) => pageName(file, lang, defaultLang);
     return function map(path) {
       if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//')) return path;
       const cut = path.search(/[?#]/);
       const pathname = cut === -1 ? path : path.slice(0, cut);
       const query = cut === -1 ? '' : path.slice(cut);
       let m;
-      if (pathname === '/' || pathname === '/login') return 'index.html';
-      if (pathname === '/products') return `products.html${query}`;
-      if ((m = /^\/products\/(\d+)$/.exec(pathname))) return `product.html?id=${m[1]}`;
-      if (pathname === '/books') return 'books.html';
-      if ((m = /^\/books\/(\d+)\/edit$/.exec(pathname))) return `editor.html?id=${m[1]}`;
-      if ((m = /^\/api\/books\/(\d+)\/pdf$/.exec(pathname))) return `pdf.html?id=${m[1]}`;
-      if (pathname === '/imports') return 'imports.html';
-      if (pathname === '/admin/users') return 'users.html';
+      if (pathname === '/' || pathname === '/login') return page('index.html');
+      if (pathname === '/products') return `${page('products.html')}${query}`;
+      if ((m = /^\/products\/(\d+)$/.exec(pathname))) return `${page('product.html')}?id=${m[1]}`;
+      if (pathname === '/books') return page('books.html');
+      if ((m = /^\/books\/(\d+)\/edit$/.exec(pathname))) return `${page('editor.html')}?id=${m[1]}`;
+      if ((m = /^\/api\/books\/(\d+)\/pdf$/.exec(pathname))) return `${page('pdf.html')}?id=${m[1]}`;
+      if (pathname === '/imports') return page('imports.html');
+      if (pathname === '/admin/users') return page('users.html');
       if (pathname.startsWith('/api/')) return path; // intercepté par le fetch simulé
       if ((m = /^\/img\/([^/]+)\/(photo|barcode|thumb)$/.exec(pathname))) {
         // ?t=… (anti-cache de la fiche) ignoré : les fichiers ne changent pas.
@@ -64,5 +77,5 @@
     };
   }
 
-  return { createUrlMap, NO_IMAGE };
+  return { createUrlMap, pageName, NO_IMAGE };
 });

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fiche produit — Tapigro Boeken</title>
+  <link rel="stylesheet" href="css/base.css">
+  
+  
+  <link rel="stylesheet" href="css/products.css">
+  <link rel="icon" href="assets/logo-tapigro.png">
+  <link rel="stylesheet" href="demo/demo.css">
+  <script src="i18n/fr.js"></script>
+  <script src="demo/shared.js"></script>
+  <script src="data/catalog.js"></script>
+  <script src="demo/urls.js"></script>
+  <script src="demo/backend.js"></script>
+  <script src="demo/demo.js"></script>
+</head>
+<body data-page="product">
+  <div id="app">
+    
+    <aside id="menu">
+      <a class="logo" href="index.fr.html" title="Tapigro Boeken — tableau de bord">
+        <img src="assets/logo-tapigro.png" alt="Tapigro" class="logo-img">
+        <span class="logo-txt">Boeken<small>catalogues &amp; étiquettes</small></span>
+      </a>
+      <nav>
+        <a href="index.fr.html" class="" title="Tableau de bord"><span class="ico">🏠</span><span class="lbl">Tableau de bord</span></a>
+        <a href="products.fr.html" class="on" title="Produits"><span class="ico">📦</span><span class="lbl">Produits</span></a>
+        <a href="books.fr.html" class="" title="Boeken"><span class="ico">📚</span><span class="lbl">Boeken</span></a>
+        
+        <a href="imports.fr.html" class="" title="Imports"><span class="ico">⬆️</span><span class="lbl">Imports</span></a>
+        <a href="users.fr.html" class="" title="Utilisateurs"><span class="ico">👤</span><span class="lbl">Utilisateurs</span></a>
+        
+      </nav>
+      <div class="qui">
+        <span class="qui-nom">Démo</span>
+        <span class="qui-role">Administrateur</span>
+        <button id="logout-btn" type="button" class="lien" title="Se déconnecter"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Se déconnecter</span></button>
+        
+        <span class="langues" role="group" aria-label="Langue de l’application">
+          <button type="button" class="lien lang-btn" data-lang="nl" lang="nl" aria-pressed="false">NL</button><button type="button" class="lien lang-btn on" data-lang="fr" lang="fr" aria-pressed="true">FR</button>
+        </span>
+      </div>
+    </aside>
+    
+    <main class="container">
+      <div id="flash" aria-live="polite"></div>
+      <div id="product-fiche" data-product-id="0">
+  <p><a class="retour" href="products.fr.html">← Retour aux produits</a></p>
+  <div class="entete">
+    <h1 id="fiche-titre">Fiche produit</h1>
+    <div class="actions" id="fiche-actions" hidden>
+      <button id="fiche-release" type="button" class="btn sec" hidden
+              title="Les prochains imports Optedo remettront ce produit à jour">Rendre la main à Optedo</button>
+      <button id="fiche-toggle" type="button" class="btn sec"></button>
+    </div>
+  </div>
+  <p class="sub" id="fiche-sub"></p>
+
+  <div class="fiche-grid">
+    <div class="panel">
+      <h2>Informations</h2>
+      <form id="fiche-form" class="form" autocomplete="off">
+        <label for="fp-code">Code produit
+          <input id="fp-code" type="text" readonly>
+        </label>
+        <label for="fp-name">Nom *
+          <input id="fp-name" name="name" type="text" required maxlength="200">
+        </label>
+        <label for="fp-category">Catégorie
+          <input id="fp-category" name="category" type="text" maxlength="200">
+        </label>
+        <label for="fp-group">Groupe
+          <input id="fp-group" name="group" type="text" maxlength="200">
+        </label>
+        <label for="fp-unit">Unité
+          <input id="fp-unit" name="unit" type="text" maxlength="50">
+        </label>
+        <label for="fp-minstock">Stock minimum
+          <input id="fp-minstock" name="minimumStock" type="number" min="0" step="any">
+        </label>
+        <div class="actions large" id="fiche-save-zone" hidden>
+          <button type="submit" class="btn">Enregistrer</button>
+        </div>
+      </form>
+      <p class="fiche-meta" id="fiche-meta"></p>
+    </div>
+
+    <div class="fiche-images">
+      <div class="panel">
+        <h2>Photo</h2>
+        <figure id="fiche-photo-zone"></figure>
+        <input type="file" id="fiche-photo-file" accept=".png,.jpg,.jpeg,.webp"
+               aria-label="Remplacer la photo" hidden>
+      </div>
+      <div class="panel">
+        <h2>Code-barres</h2>
+        <figure id="fiche-barcode-zone"></figure>
+        <input type="file" id="fiche-barcode-file" accept=".png,.jpg,.jpeg,.webp"
+               aria-label="Remplacer le code-barres" hidden>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/products.js" defer></script>
+
+    </main>
+  </div>
+
+  
+  <dialog id="confirmation" class="modale" aria-labelledby="confirmation-titre">
+    <h2 id="confirmation-titre">Êtes-vous sûr ?</h2>
+    <p id="confirmation-texte"></p>
+    <div class="actions">
+      <button type="button" class="btn sec" data-reponse="non" autofocus>Non, annuler</button>
+      <button type="button" class="btn" data-reponse="oui">Oui</button>
+    </div>
+  </dialog>
+
+  
+  <dialog id="saisie" class="modale" aria-labelledby="saisie-titre">
+    <form id="saisie-form" method="dialog" autocomplete="off">
+      <h2 id="saisie-titre"></h2>
+      <label id="saisie-label" for="saisie-champ"></label>
+      <input id="saisie-champ" type="text" maxlength="200">
+      <div class="actions">
+        <button type="button" class="btn sec" data-reponse="non">Annuler</button>
+        <button type="submit" class="btn" data-reponse="oui">Valider</button>
+      </div>
+    </form>
+  </dialog>
+
+  
+  <script src="js/common.js"></script>
+</body>
+</html>

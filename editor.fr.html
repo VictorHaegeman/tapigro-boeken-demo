@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Éditeur — Tapigro Boeken</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/editor.css">
+  
+  
+  <link rel="icon" href="assets/logo-tapigro.png">
+  <link rel="stylesheet" href="demo/demo.css">
+  <script src="i18n/fr.js"></script>
+  <script src="demo/shared.js"></script>
+  <script src="data/catalog.js"></script>
+  <script src="demo/urls.js"></script>
+  <script src="demo/backend.js"></script>
+  <script src="demo/demo.js"></script>
+</head>
+<body data-page="editor">
+  <div id="app">
+    
+    <aside id="menu">
+      <a class="logo" href="index.fr.html" title="Tapigro Boeken — tableau de bord">
+        <img src="assets/logo-tapigro.png" alt="Tapigro" class="logo-img">
+        <span class="logo-txt">Boeken<small>catalogues &amp; étiquettes</small></span>
+      </a>
+      <nav>
+        <a href="index.fr.html" class="" title="Tableau de bord"><span class="ico">🏠</span><span class="lbl">Tableau de bord</span></a>
+        <a href="products.fr.html" class="" title="Produits"><span class="ico">📦</span><span class="lbl">Produits</span></a>
+        <a href="books.fr.html" class="on" title="Boeken"><span class="ico">📚</span><span class="lbl">Boeken</span></a>
+        
+        <a href="imports.fr.html" class="" title="Imports"><span class="ico">⬆️</span><span class="lbl">Imports</span></a>
+        <a href="users.fr.html" class="" title="Utilisateurs"><span class="ico">👤</span><span class="lbl">Utilisateurs</span></a>
+        
+      </nav>
+      <div class="qui">
+        <span class="qui-nom">Démo</span>
+        <span class="qui-role">Administrateur</span>
+        <button id="logout-btn" type="button" class="lien" title="Se déconnecter"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Se déconnecter</span></button>
+        
+        <span class="langues" role="group" aria-label="Langue de l’application">
+          <button type="button" class="lien lang-btn" data-lang="nl" lang="nl" aria-pressed="false">NL</button><button type="button" class="lien lang-btn on" data-lang="fr" lang="fr" aria-pressed="true">FR</button>
+        </span>
+      </div>
+    </aside>
+    
+    <main class="container">
+      <div id="flash" aria-live="polite"></div>
+      <div id="editor-root" class="editor" data-book-id="0">
+  <div class="editor-main">
+    <div class="editor-toolbar">
+      <a class="back-link" href="books.fr.html">← Boeken</a>
+      <input id="book-name" type="text" maxlength="200" aria-label="Nom du boek">
+      <label id="fixed-pages-setting" class="fixed-setting" hidden
+             title="Ajouter ou retirer les pages fixes de ce boek (les textes sont conservés)">
+        <input id="fixed-pages-toggle" type="checkbox"> Couverture, page 2 et dos
+      </label>
+      <span id="save-status" class="save-status is-saved" role="status">Enregistré</span>
+      <button id="save-btn" type="button" class="btn sec petit">Enregistrer</button>
+      <a id="pdf-link" class="btn petit" href="pdf.fr.html?id=0">Exporter en PDF</a>
+    </div>
+    <p id="editor-error" class="error" hidden></p>
+    <div id="spreads" class="spreads" aria-label="Pages du boek"></div>
+  </div>
+  <aside class="product-panel" id="product-panel" aria-label="Produits">
+    <div class="panel-filters">
+      <input id="prod-search" type="search" placeholder="Rechercher code ou nom…" aria-label="Recherche produit">
+      <select id="prod-category" aria-label="Filtre catégorie"><option value="">Toutes catégories</option></select>
+      <select id="prod-group" aria-label="Filtre groupe"><option value="">Tous groupes</option></select>
+    </div>
+    <div id="prod-count" class="prod-count"></div>
+    <div id="prod-list" class="prod-list"></div>
+    <button id="prod-more" type="button" class="btn sec petit" hidden>Afficher plus de produits</button>
+  </aside>
+</div>
+<script src="vendor/sortable.min.js" defer></script>
+<script src="js/layout-render.js" defer></script>
+<script src="js/editor/autosave.js" defer></script>
+<script src="js/editor/title-follow.js" defer></script>
+<script src="js/editor/scroll-anchor.js" defer></script>
+<script src="js/editor/dragdrop.js" defer></script>
+<script src="js/editor/editor.js" defer></script>
+
+    </main>
+  </div>
+
+  
+  <dialog id="confirmation" class="modale" aria-labelledby="confirmation-titre">
+    <h2 id="confirmation-titre">Êtes-vous sûr ?</h2>
+    <p id="confirmation-texte"></p>
+    <div class="actions">
+      <button type="button" class="btn sec" data-reponse="non" autofocus>Non, annuler</button>
+      <button type="button" class="btn" data-reponse="oui">Oui</button>
+    </div>
+  </dialog>
+
+  
+  <dialog id="saisie" class="modale" aria-labelledby="saisie-titre">
+    <form id="saisie-form" method="dialog" autocomplete="off">
+      <h2 id="saisie-titre"></h2>
+      <label id="saisie-label" for="saisie-champ"></label>
+      <input id="saisie-champ" type="text" maxlength="200">
+      <div class="actions">
+        <button type="button" class="btn sec" data-reponse="non">Annuler</button>
+        <button type="submit" class="btn" data-reponse="oui">Valider</button>
+      </div>
+    </form>
+  </dialog>
+
+  
+  <script src="js/common.js"></script>
+</body>
+</html>

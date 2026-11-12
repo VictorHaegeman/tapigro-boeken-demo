@@ -11,9 +11,47 @@
   'use strict';
 
   const STORAGE_KEY = 'tapigro-boeken-demo';
+  const LANG_KEY = 'tapigro-boeken-demo-lang';
+  const catalog = window.TapigroDemoCatalog;
+  const pageLang = document.documentElement.lang;
+
+  // ---- langue -------------------------------------------------------------------
+  // Chaque page existe en NL et en FR (index.html / index.fr.html…). Le choix
+  // du sélecteur NL / FR est mémorisé dans ce navigateur ; une page ouverte
+  // dans l'autre langue est aussitôt remplacée par sa version dans la langue
+  // choisie (avant tout affichage).
+  function storedLang() {
+    try {
+      return window.localStorage.getItem(LANG_KEY);
+    } catch {
+      return null;
+    }
+  }
+  function urlInLang(lang) {
+    const file = window.location.pathname.split('/').pop() || 'index.html';
+    const base = file.replace(/\.(nl|fr)\.html$/, '.html');
+    const target = window.TapigroDemoUrls.pageName(base, lang, catalog.defaultLang);
+    return target + window.location.search + window.location.hash;
+  }
+  const preferred = storedLang();
+  if ((preferred === 'nl' || preferred === 'fr') && preferred !== pageLang) {
+    window.location.replace(urlInLang(preferred));
+  }
+
   const backend = window.TapigroDemoBackend.createBackend({
-    catalog: window.TapigroDemoCatalog,
+    catalog,
     storage: window.TapigroDemoBackend.browserStorage(STORAGE_KEY),
+    lang: pageLang,
+    // PATCH /api/me {lang} (sélecteur du menu) : common.js recharge ensuite la
+    // page, que la redirection ci-dessus remet dans la bonne langue.
+    onLang: (lang) => {
+      try {
+        window.localStorage.setItem(LANG_KEY, lang);
+      } catch {
+        /* stockage indisponible : on change quand même de page tout de suite */
+        window.location.replace(urlInLang(lang));
+      }
+    },
   });
   window.TapigroDemo = { backend };
   document.documentElement.classList.add('demo');
@@ -91,24 +129,23 @@
   // ---- bandeau --------------------------------------------------------------------------
 
   function addBanner() {
+    const t = window.App.t;
     const bar = document.createElement('div');
     bar.className = 'demo-bandeau';
     bar.setAttribute('role', 'note');
     const text = document.createElement('span');
     const strong = document.createElement('strong');
-    strong.textContent = 'Démo';
-    text.append(strong, ' — vos modifications restent dans ce navigateur.');
+    strong.textContent = t('demo.bannerLabel');
+    text.append(strong, t('demo.bannerText'));
     const reset = document.createElement('button');
     reset.type = 'button';
     reset.className = 'demo-reset';
-    reset.textContent = 'Réinitialiser la démo';
+    reset.textContent = t('demo.reset');
     reset.addEventListener('click', async () => {
       const ok = await window.App.confirm({
-        titre: 'Réinitialiser la démo ?',
-        texte:
-          'Les boeken créés et les produits modifiés dans ce navigateur seront effacés ; ' +
-          'la démo repart avec le catalogue d’origine et le boek d’exemple.',
-        oui: 'Oui, réinitialiser',
+        titre: t('demo.resetTitle'),
+        texte: t('demo.resetText'),
+        oui: t('demo.resetYes'),
         danger: true,
       });
       if (!ok) return;

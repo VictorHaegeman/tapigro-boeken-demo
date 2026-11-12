@@ -16,24 +16,35 @@
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
+    const i18n = require('../server/i18n');
     module.exports = factory({
       validate: require('../server/middleware/validate').validate,
       HttpError: require('../server/middleware/errors').HttpError,
+      translateError: require('../server/middleware/errors').translateError,
       rules: require('../server/services/productRules'),
       layoutsLib: require('../server/services/layouts'),
+      translator: (lang) => i18n.translator(lang),
+      hasKey: i18n.has,
     });
   } else {
+    // Navigateur : dictionnaire de la page (GET /i18n/<langue>.js → i18n/<langue>.js).
     const s = root.TapigroShared;
+    const I18N = root.TapigroI18n || { messages: {}, fallback: null };
+    const core = s.i18n;
+    const fallback = I18N.fallback || I18N.messages;
     root.TapigroDemoBackend = factory({
       validate: s.validate.validate,
       HttpError: s.errors.HttpError,
+      translateError: s.errors.translateError,
       rules: s.productRules,
       layoutsLib: s.layouts,
+      translator: () => core.createTranslator(I18N.messages, fallback),
+      hasKey: (key) => core.lookup(fallback, key) !== undefined,
     });
   }
 })(typeof self !== 'undefined' ? self : this, function (deps) {
   'use strict';
-  const { validate, HttpError, rules, layoutsLib } = deps;
+  const { validate, HttpError, translateError, rules, layoutsLib, translator, hasKey } = deps;
 
   const STATE_VERSION = 1;
   const STEP = 1024; // bookService.js : pas initial entre deux positions
@@ -41,7 +52,7 @@
   const MAX_PAGES_PER_BOOK = 500;
   const MAX_BOOKS = 200;
   const TITLE_SLOT = 'cover_title';
-  const DEMO_USER = { id: 1, username: 'Démo', role: 'admin' };
+  const DEMO_USER = { id: 1, username: 'Demo', role: 'admin', lang: null };
 
   // Horodatage au format SQLite datetime('now') : 'YYYY-MM-DD HH:MM:SS' (UTC).
   function sqliteNow(date = new Date()) {
@@ -73,8 +84,12 @@
    * @param {{load(): object|null, save(state): void, clear(): void}} [opts.storage]
    * @param {() => Date} [opts.clock] horloge (tests)
    * @param {boolean} [opts.seed=true] boek d'exemple au premier chargement
+   * @param {string} [opts.lang='nl'] langue des messages d'erreur (comme le serveur)
+   * @param {(lang: string) => void} [opts.onLang] PATCH /api/me {lang} : la page
+   *   mémorise le choix et s'affiche dans la nouvelle langue
    */
-  function createBackend({ catalog, storage = null, clock = () => new Date(), seed = true }) {
+  function createBackend({ catalog, storage = null, clock = () => new Date(), seed = true, lang = 'nl', onLang = null }) {
+    const t = translator(lang);
     const layouts = catalog.layouts;
     const layoutById = Object.fromEntries(layouts.map((l) => [l.id, l]));
     const now = () => sqliteNow(clock());
@@ -177,18 +192,21 @@
 
     function getProduct(id) {
       const p = productById(id);
-      if (!p) throw new HttpError(404, 'NOT_FOUND', 'Product not found');
+      if (!p) throw new HttpError(404, 'NOT_FOUND', 'Product not found', 'apiErrors.productNotFound');
       return p;
     }
 
     function createProduct(v) {
       if (rules.isReservedCode(v.code)) {
-        throw new HttpError(400, 'VALIDATION', rules.RESERVED_CODE_MESSAGE);
+        throw new HttpError(400, 'VALIDATION', rules.RESERVED_CODE_MESSAGE, 'apiErrors.reservedCode');
       }
       const lower = v.code.toLowerCase(); // COLLATE NOCASE (ASCII)
       const exists = state.products.find((p) => p.code.toLowerCase() === lower);
       if (exists) {
-        throw new HttpError(409, 'CODE_TAKEN', `Le code produit ${exists.code} existe déjà`);
+        throw new HttpError(409, 'CODE_TAKEN', `Product code ${exists.code} already exists`, {
+          key: 'apiErrors.codeTaken',
+          params: { code: exists.code },
+        });
       }
       const t = now();
       const p = {
@@ -219,7 +237,7 @@
         if (body && body[key] === '') fields[key] = '';
       }
       if (Object.keys(fields).length === 0) {
-        throw new HttpError(400, 'VALIDATION', 'Aucun champ à modifier');
+        throw new HttpError(400, 'VALIDATION', 'Nothing to update', 'apiErrors.nothingToUpdate');
       }
       let changed = false;
       for (const key of ['name', 'category', 'group', 'unit', 'minimumStock', 'isActive']) {
@@ -238,11 +256,7 @@
     function releaseProduct(id) {
       const p = getProduct(id);
       if (p.source !== 'import') {
-        throw new HttpError(
-          400,
-          'VALIDATION',
-          'Ce produit a été ajouté à la main : il n’est pas géré par les imports'
-        );
+        throw new HttpError(400, 'VALIDATION', 'Manual product: not managed by imports', 'apiErrors.releaseManual');
       }
       p.modifiedManuallyAt = null;
       p.updatedAt = now();
@@ -253,7 +267,7 @@
 
     function getBookRow(id) {
       const b = state.books.find((x) => x.id === id);
-      if (!b) throw new HttpError(404, 'NOT_FOUND', 'Book not found');
+      if (!b) throw new HttpError(404, 'NOT_FOUND', 'Book not found', 'apiErrors.bookNotFound');
       return b;
     }
     function layoutOf(b) {
@@ -263,12 +277,12 @@
     }
     function getPageRow(bookId, pageId) {
       const p = state.pages.find((x) => x.id === pageId && x.bookId === bookId);
-      if (!p) throw new HttpError(404, 'NOT_FOUND', 'Page not found');
+      if (!p) throw new HttpError(404, 'NOT_FOUND', 'Page not found', 'apiErrors.pageNotFound');
       return p;
     }
     function getItemRow(bookId, itemId) {
       const it = state.items.find((x) => x.id === itemId && x.bookId === bookId);
-      if (!it) throw new HttpError(404, 'NOT_FOUND', 'Item not found');
+      if (!it) throw new HttpError(404, 'NOT_FOUND', 'Item not found', 'apiErrors.itemNotFound');
       return it;
     }
     const touchBook = (b) => {
@@ -328,7 +342,10 @@
 
     function checkBookQuota() {
       if (state.books.length >= MAX_BOOKS) {
-        throw new HttpError(400, 'QUOTA', `Too many books (${MAX_BOOKS} max)`);
+        throw new HttpError(400, 'QUOTA', `Too many books (${MAX_BOOKS} max)`, {
+          key: 'apiErrors.tooManyBooks',
+          params: { n: MAX_BOOKS },
+        });
       }
     }
 
@@ -341,7 +358,12 @@
     function createBook(name, layoutId, { fixedPages = true } = {}) {
       const layout = layoutById[layoutId];
       if (!layout) {
-        throw new HttpError(400, 'VALIDATION', `layoutId must be one of: ${Object.keys(layoutById).join(', ')}`);
+        throw new HttpError(
+          400,
+          'VALIDATION',
+          `layoutId must be one of: ${Object.keys(layoutById).join(', ')}`,
+          'apiErrors.unknownLayout'
+        );
       }
       checkBookQuota();
       const withFixed = Boolean(fixedPages) && layoutsLib.hasFixedPages(layout);
@@ -376,9 +398,17 @@
           throw new HttpError(400, 'VALIDATION', 'texts must be an object');
         }
         for (const [slot, value] of Object.entries(texts)) {
-          if (!slots.has(slot)) throw new HttpError(400, 'VALIDATION', `Unknown text slot: ${slot}`);
+          if (!slots.has(slot)) {
+            throw new HttpError(400, 'VALIDATION', `Unknown text slot: ${slot}`, {
+              key: 'apiErrors.unknownTextSlot',
+              params: { slot },
+            });
+          }
           if (typeof value !== 'string' || value.length > TEXT_MAX) {
-            throw new HttpError(400, 'VALIDATION', `texts.${slot} must be a string of at most ${TEXT_MAX} characters`);
+            throw new HttpError(400, 'VALIDATION', `texts.${slot} must be a string of at most ${TEXT_MAX} characters`, {
+              key: 'apiErrors.textTooLong',
+              params: { slot, max: TEXT_MAX },
+            });
           }
         }
         nextTexts = { ...texts };
@@ -389,7 +419,7 @@
           throw new HttpError(400, 'VALIDATION', 'fixedPages must be a boolean');
         }
         if (fixedPages && !layoutsLib.hasFixedPages(layout)) {
-          throw new HttpError(400, 'VALIDATION', 'Ce format ne propose pas de pages fixes');
+          throw new HttpError(400, 'VALIDATION', 'Layout has no fixed pages', 'apiErrors.noFixedPages');
         }
         b.hasFixedPages = fixedPages;
       }
@@ -454,7 +484,10 @@
       const b = getBookRow(bookId);
       const pages = bookPages(bookId);
       if (pages.length >= MAX_PAGES_PER_BOOK) {
-        throw new HttpError(400, 'QUOTA', `Too many pages (${MAX_PAGES_PER_BOOK} max per book)`);
+        throw new HttpError(400, 'QUOTA', `Too many pages (${MAX_PAGES_PER_BOOK} max per book)`, {
+          key: 'apiErrors.tooManyPages',
+          params: { n: MAX_PAGES_PER_BOOK },
+        });
       }
       const maxNo = pages.reduce((m, p) => Math.max(m, p.pageNo), 0);
       const after = afterPageNo === undefined ? maxNo : Math.min(afterPageNo, maxNo);
@@ -468,7 +501,7 @@
       const b = getBookRow(bookId);
       getPageRow(bookId, pageId);
       if (state.items.some((it) => it.pageId === pageId)) {
-        throw new HttpError(409, 'PAGE_NOT_EMPTY', 'Page is not empty');
+        throw new HttpError(409, 'PAGE_NOT_EMPTY', 'Page is not empty', 'apiErrors.PAGE_NOT_EMPTY');
       }
       state.pages = state.pages.filter((p) => p.id !== pageId);
       touchBook(b);
@@ -509,10 +542,13 @@
     function insertItem(bookId, { pageId, productId, beforeItemId = null }) {
       const b = getBookRow(bookId);
       getPageRow(bookId, pageId);
-      if (!productById(productId)) throw new HttpError(404, 'NOT_FOUND', 'Product not found');
+      if (!productById(productId)) throw new HttpError(404, 'NOT_FOUND', 'Product not found', 'apiErrors.productNotFound');
       const capacity = capacityOf(layoutOf(b));
       if (pageItems(pageId).length >= capacity) {
-        throw new HttpError(409, 'PAGE_FULL', `Page is full (${capacity} items max)`);
+        throw new HttpError(409, 'PAGE_FULL', `Page is full (${capacity} items max)`, {
+          key: 'apiErrors.pageFull',
+          params: { n: capacity },
+        });
       }
       const position = positionFor(pageId, beforeItemId);
       const it = { id: nextId(state.items), bookId, pageId, productId, position };
@@ -531,7 +567,10 @@
       if (pageId !== it.pageId) {
         const capacity = capacityOf(layoutOf(b));
         if (pageItems(pageId).length >= capacity) {
-          throw new HttpError(409, 'PAGE_FULL', `Page is full (${capacity} items max)`);
+          throw new HttpError(409, 'PAGE_FULL', `Page is full (${capacity} items max)`, {
+          key: 'apiErrors.pageFull',
+          params: { n: capacity },
+        });
         }
       }
       const position = positionFor(pageId, beforeItemId, itemId);
@@ -640,7 +679,20 @@
 
     // [méthode, motif, handler(match, body, query) → {status?, body}]
     const ROUTES = [
-      ['GET', /^\/api\/me$/, () => ({ body: { user: DEMO_USER, csrfToken: 'demo' } })],
+      ['GET', /^\/api\/me$/, () => ({
+        body: { user: { ...DEMO_USER, username: t('demo.userName'), lang }, csrfToken: 'demo' },
+      })],
+      ['PATCH', /^\/api\/me$/, (m, b) => {
+        const next = b ? b.lang : undefined;
+        if (next !== 'nl' && next !== 'fr') {
+          throw new HttpError(400, 'VALIDATION', 'lang must be one of: nl, fr', {
+            key: 'validation.enum',
+            params: { field: 'lang', values: 'nl, fr' },
+          });
+        }
+        if (onLang) onLang(next);
+        return { body: { user: { ...DEMO_USER, username: t('demo.userName'), lang: next }, csrfToken: 'demo' } };
+      }],
       ['POST', /^\/api\/logout$/, () => ({ body: { ok: true } })],
       ['GET', /^\/api\/layouts$/, () => ({ body: { layouts: clone(layouts) } })],
 
@@ -662,7 +714,7 @@
       })],
       ['POST', /^\/api\/products\/([^/]+)\/(photo|barcode)$/, (m) => {
         getProduct(idOf(m[1]));
-        throw new HttpError(400, 'VALIDATION', 'L’ajout d’images n’est pas disponible dans la démo');
+        throw new HttpError(400, 'VALIDATION', 'Images are not available in the demo', 'apiErrors.demoImages');
       }],
 
       ['GET', /^\/api\/books$/, () => ({ body: { items: listBooks() } })],
@@ -779,15 +831,10 @@
           if (saved && saved.version === STATE_VERSION) state = saved;
         }
         const status = Number.isInteger(err.status) ? err.status : 500;
-        return {
-          status,
-          body: {
-            error: {
-              code: err.code || 'INTERNAL',
-              message: status >= 500 && !err.code ? 'Internal error' : err.message,
-            },
-          },
-        };
+        const code = err.code || 'INTERNAL';
+        // Message traduit exactement comme le fait errorHandler sur le serveur.
+        const message = translateError(err, code, t, hasKey) || err.message;
+        return { status, body: { error: { code, message } } };
       }
     }
 

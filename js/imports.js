@@ -12,7 +12,7 @@
     const session = await window.App.fetchMe();
     if (!session) {
       window.location.href = window.App.url('/login');
-      throw new Error('Session expirée');
+      throw new Error(window.App.t('common.sessionExpired'));
     }
     const res = await fetch(path, {
       method: 'POST',
@@ -27,15 +27,22 @@
     }
     if (res.status === 401) {
       window.location.href = window.App.url('/login');
-      throw new Error('Session expirée');
+      throw new Error(window.App.t('common.sessionExpired'));
     }
     if (!res.ok) {
-      throw new Error(data && data.error ? data.error.message : `Erreur HTTP ${res.status}`);
+      throw new Error(data && data.error ? data.error.message : window.App.t('common.httpError', { status: res.status }));
     }
     return data;
   }
 
   const esc = (s) => window.App.esc(s);
+  const t = (key, params) => window.App.t(key, params);
+
+  // Texte d'une entrée du journal : traduit depuis sa clé (imports récents),
+  // sinon le texte enregistré tel quel (anciens imports, en français).
+  function entryText(e) {
+    return e.key ? t(e.key, e.params) : e.message;
+  }
 
   function renderCounts(parts) {
     return parts
@@ -61,7 +68,9 @@
   }
 
   function formatEntry(e) {
-    return e.sheet ? `${e.sheet} ligne ${e.row} : ${e.message}` : e.message;
+    if (e.sheet) return t('imports.sheetRow', { sheet: e.sheet, row: e.row, message: entryText(e) });
+    if (e.key && e.file) return t('imports.fileReason', { file: e.file, reason: entryText(e) });
+    return entryText(e);
   }
 
   function showResult(el, html, ok) {
@@ -84,12 +93,12 @@
         .map((it) => {
           const { warnings, errors } = splitWarnings(it.errors);
           const detail =
-            renderDetails('Avertissements', warnings.map(formatEntry), 'warning') +
-            renderDetails('Erreurs', errors.map(formatEntry), 'error');
+            renderDetails(t('imports.warnings'), warnings.map(formatEntry), 'warning') +
+            renderDetails(t('imports.errors'), errors.map(formatEntry), 'error');
           return `<tr>
-            <td>${esc(it.startedAt)}</td>
+            <td title="${esc(it.startedAt)}">${esc(window.App.formatDate(it.startedAt))}</td>
             <td>${esc(it.username)}</td>
-            <td>${esc(it.kind)}</td>
+            <td>${esc(it.kind === 'excel' ? t('imports.kindExcel') : it.kind === 'images' ? t('imports.kindImages') : it.kind)}</td>
             <td>${esc(it.fileName)}</td>
             <td>${it.created}</td>
             <td>${it.updated}</td>
@@ -132,14 +141,14 @@
         showResult(
           resultEl,
           renderCounts([
-            ['créés', r.created],
-            ['modifiés', r.updated],
-            ['inchangés', r.unchanged],
-            ['ignorés (modifiés à la main)', r.skippedManual || 0],
-            ['désactivés', r.deactivated],
+            [t('imports.created'), r.created],
+            [t('imports.updated'), r.updated],
+            [t('imports.unchanged'), r.unchanged],
+            [t('imports.skipped'), r.skippedManual || 0],
+            [t('imports.deactivated'), r.deactivated],
           ]) +
-            renderDetails('Avertissements', warnings.map(formatEntry), 'warning') +
-            renderDetails('Erreurs', errors.map(formatEntry), 'error'),
+            renderDetails(t('imports.warnings'), warnings.map(formatEntry), 'warning') +
+            renderDetails(t('imports.errors'), errors.map(formatEntry), 'error'),
           errors.length === 0
         );
         form.reset();
@@ -169,7 +178,7 @@
       if (zips.length === 1 && files.length === 1) {
         fd.append('zip', zips[0]);
       } else if (zips.length > 0) {
-        window.App.showError(errEl, new Error('Envoyez soit UN zip, soit des images — pas les deux.'));
+        window.App.showError(errEl, new Error(t('imports.zipAndImages')));
         return;
       } else {
         for (const f of files) fd.append('files', f);
@@ -180,10 +189,14 @@
         showResult(
           resultEl,
           renderCounts([
-            ['associées', r.matched],
-            ['remplacées', r.replaced],
-            ['ignorées', r.ignored.length],
-          ]) + renderDetails('Fichiers ignorés', r.ignored.map((i) => `${i.file} : ${i.reason}`)),
+            [t('imports.matched'), r.matched],
+            [t('imports.replaced'), r.replaced],
+            [t('imports.ignored'), r.ignored.length],
+          ]) +
+            renderDetails(
+              t('imports.ignoredFiles'),
+              r.ignored.map((i) => t('imports.fileReason', { file: i.file, reason: i.key ? t(i.key, i.params) : i.reason }))
+            ),
           r.ignored.length === 0
         );
         form.reset();

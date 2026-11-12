@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="nl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fiche produit — Tapigro Boeken</title>
+  <title>Productfiche — Tapigro Boeken</title>
   <link rel="stylesheet" href="css/base.css">
   
   
   <link rel="stylesheet" href="css/products.css">
   <link rel="icon" href="assets/logo-tapigro.png">
   <link rel="stylesheet" href="demo/demo.css">
+  <script src="i18n/nl.js"></script>
   <script src="demo/shared.js"></script>
   <script src="data/catalog.js"></script>
   <script src="demo/urls.js"></script>
@@ -20,35 +21,39 @@
   <div id="app">
     
     <aside id="menu">
-      <a class="logo" href="index.html" title="Tapigro Boeken — tableau de bord">
+      <a class="logo" href="index.html" title="Tapigro Boeken — dashboard">
         <img src="assets/logo-tapigro.png" alt="Tapigro" class="logo-img">
-        <span class="logo-txt">Boeken<small>catalogues &amp; étiquettes</small></span>
+        <span class="logo-txt">Boeken<small>catalogi &amp; etiketten</small></span>
       </a>
       <nav>
-        <a href="index.html" class="" title="Tableau de bord"><span class="ico">🏠</span><span class="lbl">Tableau de bord</span></a>
-        <a href="products.html" class="on" title="Produits"><span class="ico">📦</span><span class="lbl">Produits</span></a>
+        <a href="index.html" class="" title="Dashboard"><span class="ico">🏠</span><span class="lbl">Dashboard</span></a>
+        <a href="products.html" class="on" title="Producten"><span class="ico">📦</span><span class="lbl">Producten</span></a>
         <a href="books.html" class="" title="Boeken"><span class="ico">📚</span><span class="lbl">Boeken</span></a>
         
-        <a href="imports.html" class="" title="Imports"><span class="ico">⬆️</span><span class="lbl">Imports</span></a>
-        <a href="users.html" class="" title="Utilisateurs"><span class="ico">👤</span><span class="lbl">Utilisateurs</span></a>
+        <a href="imports.html" class="" title="Importeren"><span class="ico">⬆️</span><span class="lbl">Importeren</span></a>
+        <a href="users.html" class="" title="Gebruikers"><span class="ico">👤</span><span class="lbl">Gebruikers</span></a>
         
       </nav>
       <div class="qui">
-        <span class="qui-nom">Démo</span>
-        <span class="qui-role">Administrateur</span>
-        <button id="logout-btn" type="button" class="lien" title="Se déconnecter"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Se déconnecter</span></button>
+        <span class="qui-nom">Demo</span>
+        <span class="qui-role">Beheerder</span>
+        <button id="logout-btn" type="button" class="lien" title="Afmelden"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Afmelden</span></button>
+        
+        <span class="langues" role="group" aria-label="Taal van de toepassing">
+          <button type="button" class="lien lang-btn on" data-lang="nl" lang="nl" aria-pressed="true">NL</button><button type="button" class="lien lang-btn" data-lang="fr" lang="fr" aria-pressed="false">FR</button>
+        </span>
       </div>
     </aside>
     
     <main class="container">
       <div id="flash" aria-live="polite"></div>
       <div id="product-fiche" data-product-id="0">
-  <p><a class="retour" href="products.html">← Retour aux produits</a></p>
+  <p><a class="retour" href="products.html">← Terug naar de producten</a></p>
   <div class="entete">
-    <h1 id="fiche-titre">Fiche produit</h1>
+    <h1 id="fiche-titre">Productfiche</h1>
     <div class="actions" id="fiche-actions" hidden>
       <button id="fiche-release" type="button" class="btn sec" hidden
-              title="Les prochains imports Optedo remettront ce produit à jour">Rendre la main à Optedo</button>
+              title="De volgende imports uit Optedo werken dit product opnieuw bij">Teruggeven aan Optedo</button>
       <button id="fiche-toggle" type="button" class="btn sec"></button>
     </div>
   </div>
@@ -56,28 +61,28 @@
 
   <div class="fiche-grid">
     <div class="panel">
-      <h2>Informations</h2>
+      <h2>Gegevens</h2>
       <form id="fiche-form" class="form" autocomplete="off">
-        <label for="fp-code">Code produit
+        <label for="fp-code">Productcode
           <input id="fp-code" type="text" readonly>
         </label>
-        <label for="fp-name">Nom *
+        <label for="fp-name">Naam *
           <input id="fp-name" name="name" type="text" required maxlength="200">
         </label>
-        <label for="fp-category">Catégorie
+        <label for="fp-category">Categorie
           <input id="fp-category" name="category" type="text" maxlength="200">
         </label>
-        <label for="fp-group">Groupe
+        <label for="fp-group">Productgroep
           <input id="fp-group" name="group" type="text" maxlength="200">
         </label>
-        <label for="fp-unit">Unité
+        <label for="fp-unit">Eenheid
           <input id="fp-unit" name="unit" type="text" maxlength="50">
         </label>
-        <label for="fp-minstock">Stock minimum
+        <label for="fp-minstock">Minimum voorraad
           <input id="fp-minstock" name="minimumStock" type="number" min="0" step="any">
         </label>
         <div class="actions large" id="fiche-save-zone" hidden>
-          <button type="submit" class="btn">Enregistrer</button>
+          <button type="submit" class="btn">Opslaan</button>
         </div>
       </form>
       <p class="fiche-meta" id="fiche-meta"></p>
@@ -85,16 +90,16 @@
 
     <div class="fiche-images">
       <div class="panel">
-        <h2>Photo</h2>
+        <h2>Foto</h2>
         <figure id="fiche-photo-zone"></figure>
         <input type="file" id="fiche-photo-file" accept=".png,.jpg,.jpeg,.webp"
-               aria-label="Remplacer la photo" hidden>
+               aria-label="Foto vervangen" hidden>
       </div>
       <div class="panel">
-        <h2>Code-barres</h2>
+        <h2>Barcode</h2>
         <figure id="fiche-barcode-zone"></figure>
         <input type="file" id="fiche-barcode-file" accept=".png,.jpg,.jpeg,.webp"
-               aria-label="Remplacer le code-barres" hidden>
+               aria-label="Barcode vervangen" hidden>
       </div>
     </div>
   </div>
@@ -107,11 +112,11 @@
 
   
   <dialog id="confirmation" class="modale" aria-labelledby="confirmation-titre">
-    <h2 id="confirmation-titre">Êtes-vous sûr ?</h2>
+    <h2 id="confirmation-titre">Weet u het zeker?</h2>
     <p id="confirmation-texte"></p>
     <div class="actions">
-      <button type="button" class="btn sec" data-reponse="non" autofocus>Non, annuler</button>
-      <button type="button" class="btn" data-reponse="oui">Oui</button>
+      <button type="button" class="btn sec" data-reponse="non" autofocus>Nee, annuleren</button>
+      <button type="button" class="btn" data-reponse="oui">Ja</button>
     </div>
   </dialog>
 
@@ -122,12 +127,13 @@
       <label id="saisie-label" for="saisie-champ"></label>
       <input id="saisie-champ" type="text" maxlength="200">
       <div class="actions">
-        <button type="button" class="btn sec" data-reponse="non">Annuler</button>
-        <button type="submit" class="btn" data-reponse="oui">Valider</button>
+        <button type="button" class="btn sec" data-reponse="non">Annuleren</button>
+        <button type="submit" class="btn" data-reponse="oui">Bevestigen</button>
       </div>
     </form>
   </dialog>
 
+  
   <script src="js/common.js"></script>
 </body>
 </html>

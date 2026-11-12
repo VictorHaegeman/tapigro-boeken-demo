@@ -147,7 +147,8 @@ body[data-page="editor"] .container {
 }
 .lr-empty.is-hidden { display: none; }
 /* Première case libre : c'est là que le prochain produit se posera. */
-.lr-empty.is-first::before { content: "+ Glissez un produit ici"; }
+/* (texte : data-hint, posé par dragdrop.js dans la langue de l'interface) */
+.lr-empty.is-first::before { content: attr(data-hint); }
 /* Pendant un dépôt, la case cible est l'élément déposé lui-même, placé sur la
    première case libre : surlignée à la couleur de marque atténuée. Même
    aspect juste après le lâcher, le temps que le serveur réponde. */

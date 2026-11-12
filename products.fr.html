@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Produits — Tapigro Boeken</title>
+  <link rel="stylesheet" href="css/base.css">
+  
+  
+  <link rel="stylesheet" href="css/products.css">
+  <link rel="icon" href="assets/logo-tapigro.png">
+  <link rel="stylesheet" href="demo/demo.css">
+  <script src="i18n/fr.js"></script>
+  <script src="demo/shared.js"></script>
+  <script src="data/catalog.js"></script>
+  <script src="demo/urls.js"></script>
+  <script src="demo/backend.js"></script>
+  <script src="demo/demo.js"></script>
+</head>
+<body data-page="products">
+  <div id="app">
+    
+    <aside id="menu">
+      <a class="logo" href="index.fr.html" title="Tapigro Boeken — tableau de bord">
+        <img src="assets/logo-tapigro.png" alt="Tapigro" class="logo-img">
+        <span class="logo-txt">Boeken<small>catalogues &amp; étiquettes</small></span>
+      </a>
+      <nav>
+        <a href="index.fr.html" class="" title="Tableau de bord"><span class="ico">🏠</span><span class="lbl">Tableau de bord</span></a>
+        <a href="products.fr.html" class="on" title="Produits"><span class="ico">📦</span><span class="lbl">Produits</span></a>
+        <a href="books.fr.html" class="" title="Boeken"><span class="ico">📚</span><span class="lbl">Boeken</span></a>
+        
+        <a href="imports.fr.html" class="" title="Imports"><span class="ico">⬆️</span><span class="lbl">Imports</span></a>
+        <a href="users.fr.html" class="" title="Utilisateurs"><span class="ico">👤</span><span class="lbl">Utilisateurs</span></a>
+        
+      </nav>
+      <div class="qui">
+        <span class="qui-nom">Démo</span>
+        <span class="qui-role">Administrateur</span>
+        <button id="logout-btn" type="button" class="lien" title="Se déconnecter"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Se déconnecter</span></button>
+        
+        <span class="langues" role="group" aria-label="Langue de l’application">
+          <button type="button" class="lien lang-btn" data-lang="nl" lang="nl" aria-pressed="false">NL</button><button type="button" class="lien lang-btn on" data-lang="fr" lang="fr" aria-pressed="true">FR</button>
+        </span>
+      </div>
+    </aside>
+    
+    <main class="container">
+      <div id="flash" aria-live="polite"></div>
+      <div class="entete">
+  <h1>Produits</h1>
+  <button id="product-create-open" type="button" class="btn" hidden>+ Nouveau produit</button>
+</div>
+<p class="sub">Tous les produits du catalogue (import Optedo ou ajout à la main). Cliquez sur une carte pour filtrer, sur une ligne pour ouvrir la fiche.</p>
+
+<div class="cards" id="products-cards"></div>
+
+<form class="toolbar" id="products-toolbar" autocomplete="off">
+  <input type="search" id="pf-q" placeholder="Code ou nom du produit…" aria-label="Rechercher un produit">
+  <select id="pf-category" aria-label="Catégorie"><option value="">Toutes les catégories</option></select>
+  <select id="pf-group" aria-label="Groupe"><option value="">Tous les groupes</option></select>
+  <select id="pf-active" aria-label="Statut">
+    <option value="1">Actifs</option>
+    <option value="0">Retirés du catalogue</option>
+    <option value="all">Tous</option>
+  </select>
+  <button type="submit" class="btn">Rechercher</button>
+  <button type="button" id="pf-clear" class="lien" hidden>Effacer</button>
+  <span class="count" id="products-count"></span>
+</form>
+
+<div class="tablewrap">
+  <table class="table" id="products-table">
+    <thead>
+      <tr>
+        <th class="vignette" aria-label="Photo"></th>
+        <th>Code</th><th>Nom</th><th>Catégorie</th>
+        <th>Groupe</th><th>Unité</th>
+        <th class="num" title="Stock minimum (Optedo « Minimum voorraad »)">Stock min.</th>
+        <th>Statut</th>
+        <th title="Images disponibles : photo / code-barres">Images</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+<p class="vide" id="products-empty" hidden>Aucun produit. Importez un export Optedo depuis « Imports », ou cliquez sur « + Nouveau produit ».</p>
+<p class="vide" id="products-noresult" hidden>Aucun produit ne correspond à ces critères.</p>
+<div class="pager" id="products-pager" hidden>
+  <button type="button" id="pager-prev">← Précédent</button>
+  <span id="pager-info"></span>
+  <button type="button" id="pager-next">Suivant →</button>
+</div>
+
+<dialog id="product-create-dialog" class="modale" aria-labelledby="product-create-titre">
+  <h2 id="product-create-titre">Nouveau produit (ajout à la main)</h2>
+  <p class="mut">Un produit ajouté ici n’est jamais modifié par les imports Optedo.</p>
+  <form id="product-create-form" autocomplete="off">
+    <label for="np-code">Code produit * (lettres, chiffres et tirets — ex. MAN-0001)
+      <input id="np-code" name="code" type="text" required maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9\-]{0,63}">
+    </label>
+    <label for="np-name">Nom *
+      <input id="np-name" name="name" type="text" required maxlength="200">
+    </label>
+    <label for="np-category">Catégorie
+      <input id="np-category" name="category" type="text" maxlength="200" list="np-categories">
+      <datalist id="np-categories"></datalist>
+    </label>
+    <label for="np-group">Groupe
+      <input id="np-group" name="group" type="text" maxlength="200" list="np-groups">
+      <datalist id="np-groups"></datalist>
+    </label>
+    <label for="np-unit">Unité (ex. st, kg, m)
+      <input id="np-unit" name="unit" type="text" maxlength="50">
+    </label>
+    <label for="np-minstock">Stock minimum
+      <input id="np-minstock" name="minimumStock" type="number" min="0" step="any">
+    </label>
+    <p id="product-create-error" class="error" hidden></p>
+    <div class="actions">
+      <button type="button" class="btn sec" data-reponse="non">Annuler</button>
+      <button type="submit" class="btn">Créer et ouvrir la fiche</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="js/products.js" defer></script>
+
+    </main>
+  </div>
+
+  
+  <dialog id="confirmation" class="modale" aria-labelledby="confirmation-titre">
+    <h2 id="confirmation-titre">Êtes-vous sûr ?</h2>
+    <p id="confirmation-texte"></p>
+    <div class="actions">
+      <button type="button" class="btn sec" data-reponse="non" autofocus>Non, annuler</button>
+      <button type="button" class="btn" data-reponse="oui">Oui</button>
+    </div>
+  </dialog>
+
+  
+  <dialog id="saisie" class="modale" aria-labelledby="saisie-titre">
+    <form id="saisie-form" method="dialog" autocomplete="off">
+      <h2 id="saisie-titre"></h2>
+      <label id="saisie-label" for="saisie-champ"></label>
+      <input id="saisie-champ" type="text" maxlength="200">
+      <div class="actions">
+        <button type="button" class="btn sec" data-reponse="non">Annuler</button>
+        <button type="submit" class="btn" data-reponse="oui">Valider</button>
+      </div>
+    </form>
+  </dialog>
+
+  
+  <script src="js/common.js"></script>
+</body>
+</html>

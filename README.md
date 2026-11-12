@@ -1,13 +1,14 @@
-# Tapigro Boeken — démo
+# Tapigro Boeken — demo
 
-Version de démonstration de **Tapigro Boeken** (catalogues et étiquettes Tapigro),
-qui fonctionne entièrement dans le navigateur : aucun serveur, aucune installation.
+Demoversie van **Tapigro Boeken** (catalogi en etiketten van Tapigro), die volledig
+in de browser werkt: geen server, niets te installeren. Nederlands en Frans
+(keuze onderaan het menu).
 
-- Les 51 produits, photos et codes-barres sont ceux du catalogue Tapigro.
-- Vos modifications (boeken, fiches produits) restent **dans votre navigateur** ;
-  le bouton « Réinitialiser la démo » repart de zéro.
-- L'export PDF est généré dans le navigateur par le même moteur que l'application.
-- Non disponibles ici : imports Excel/images et gestion des utilisateurs.
+- De 51 producten, foto's en barcodes zijn die van de Tapigro-catalogus.
+- Uw wijzigingen (boeken, productfiches) blijven **in uw browser**; de knop
+  « Demo resetten » begint opnieuw.
+- De PDF-export wordt in de browser gemaakt met dezelfde engine als de toepassing.
+- Niet beschikbaar: Excel-/afbeeldingenimport en gebruikersbeheer.
 
-Ce dossier est généré par `npm run build:demo` dans le dépôt de l'application :
-ne pas le modifier à la main.
+Deze map wordt gegenereerd door `npm run build:demo` in de repository van de
+toepassing: niet met de hand wijzigen.

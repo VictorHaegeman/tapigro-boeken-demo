@@ -23,16 +23,28 @@ window.App = (() => {
     return me;
   }
 
-  // Messages d'erreur serveur (anglais, codes stables) → phrases françaises.
-  const ERROR_MESSAGES = {
-    BAD_CREDENTIALS: 'Nom d’utilisateur ou mot de passe incorrect.',
-    UNAUTHENTICATED: 'Session expirée : reconnectez-vous.',
-    FORBIDDEN: 'Vous n’avez pas les droits nécessaires pour cette action.',
-    RATE_LIMITED: 'Trop de tentatives : patientez un instant puis réessayez.',
-  };
+  // ---- langue (FR / NL) ----------------------------------------------------------
+  // Dictionnaire de la page : GET /i18n/<langue>.js (window.TapigroI18n), chargé
+  // juste avant ce script. Même cœur de traduction que le serveur
+  // (shared/i18n/i18n.js).
+  const I18N = window.TapigroI18n || { lang: 'nl', locale: 'nl-BE', messages: {}, fallback: null };
+  const t = window.TapigroI18nCore
+    ? window.TapigroI18nCore.createTranslator(I18N.messages, I18N.fallback || I18N.messages)
+    : (key) => key;
+  const lang = I18N.lang;
+  const locale = I18N.locale;
 
-  function frenchMessage(err) {
-    return (err && ERROR_MESSAGES[err.code]) || (err && err.message) || 'Une erreur est survenue.';
+  // Le serveur renvoie ses messages d'erreur déjà traduits (langue de
+  // l'utilisateur) ; repli générique si la réponse n'en contient pas.
+  function errorMessage(err) {
+    return (err && err.message) || t('common.genericError');
+  }
+
+  // Nombres au format de la langue (nl-BE : 2,5 ; fr-BE : 2,5).
+  function formatNumber(n) {
+    if (n === null || n === undefined || n === '') return '';
+    const num = Number(n);
+    return Number.isFinite(num) ? new Intl.NumberFormat(locale).format(num) : String(n);
   }
 
   // api('/api/x', {method, body}) → JSON ; ajoute X-CSRF-Token sur les mutations,
@@ -43,7 +55,7 @@ window.App = (() => {
       const session = await fetchMe();
       if (!session && path !== '/api/login') {
         window.location.href = url('/login');
-        throw new Error('Session expirée');
+        throw new Error(t('common.sessionExpired'));
       }
       if (session) headers['X-CSRF-Token'] = session.csrfToken;
     }
@@ -55,7 +67,7 @@ window.App = (() => {
     });
     if (res.status === 401 && path !== '/api/login') {
       window.location.href = url('/login');
-      throw new Error('Session expirée');
+      throw new Error(t('common.sessionExpired'));
     }
     let data = null;
     try {
@@ -64,7 +76,7 @@ window.App = (() => {
       /* réponse non JSON (ex. PDF) */
     }
     if (!res.ok) {
-      const message = data && data.error ? data.error.message : `Erreur HTTP ${res.status}`;
+      const message = data && data.error ? data.error.message : t('common.httpError', { status: res.status });
       const err = new Error(message);
       err.code = data && data.error ? data.error.code : 'HTTP_' + res.status;
       err.status = res.status;
@@ -78,7 +90,7 @@ window.App = (() => {
     const session = await fetchMe();
     if (!session) {
       window.location.href = url('/login');
-      throw new Error('Session expirée');
+      throw new Error(t('common.sessionExpired'));
     }
     const res = await fetch(path, {
       method: 'POST',
@@ -87,7 +99,7 @@ window.App = (() => {
     });
     if (res.status === 401) {
       window.location.href = url('/login');
-      throw new Error('Session expirée');
+      throw new Error(t('common.sessionExpired'));
     }
     let data = null;
     try {
@@ -96,7 +108,7 @@ window.App = (() => {
       /* réponse vide */
     }
     if (!res.ok) {
-      const message = data && data.error ? data.error.message : `Erreur HTTP ${res.status}`;
+      const message = data && data.error ? data.error.message : t('common.httpError', { status: res.status });
       const err = new Error(message);
       err.code = data && data.error ? data.error.code : 'HTTP_' + res.status;
       err.status = res.status;
@@ -119,33 +131,44 @@ window.App = (() => {
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
-  const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.'];
-
+  // « 12 nov. 2026 om 14:38 » (nl-BE) / « 12 nov. 2026 à 14:38 » (fr-BE).
   function formatDate(s) {
     const d = parseDbDate(s);
     if (!d) return s || '';
-    const h = String(d.getHours()).padStart(2, '0');
-    const m = String(d.getMinutes()).padStart(2, '0');
-    return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()} à ${h}:${m}`;
+    const date = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
+    const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(d);
+    return t('time.dateAt', { date, time });
   }
 
-  // « il y a 2 h », « hier »… pour les listes (le title= garde la date exacte).
+  function formatDay(s) {
+    const d = parseDbDate(s);
+    if (!d) return s || '';
+    return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
+  }
+
+  // « 2 u geleden », « gisteren »… pour les listes (le title= garde la date exacte).
   function relativeDate(s) {
     const d = parseDbDate(s);
     if (!d) return s || '';
     const sec = Math.max(0, (Date.now() - d.getTime()) / 1000);
-    if (sec < 60) return 'à l’instant';
-    if (sec < 3600) return `il y a ${Math.floor(sec / 60)} min`;
-    if (sec < 86400) return `il y a ${Math.floor(sec / 3600)} h`;
+    if (sec < 60) return t('time.justNow');
+    if (sec < 3600) return t('time.minutesAgo', { n: Math.floor(sec / 60) });
+    if (sec < 86400) return t('time.hoursAgo', { n: Math.floor(sec / 3600) });
     const days = Math.floor(sec / 86400);
-    if (days === 1) return 'hier';
-    if (days < 31) return `il y a ${days} jours`;
-    return formatDate(s).replace(/ à .*$/, '');
+    if (days === 1) return t('time.yesterday');
+    if (days < 31) return t('time.daysAgo', { n: days });
+    return formatDay(s);
   }
 
-  const ROLE_LABELS = { admin: 'Administrateur', editor: 'Éditeur', viewer: 'Lecture seule' };
   function roleLabel(role) {
-    return ROLE_LABELS[role] || role;
+    return t(`roles.${role}`);
+  }
+
+  // Libellé et description d'un format de page (layout JSON) dans la langue
+  // de l'interface : layout.labels[lang], sinon name / description.
+  function layoutLabel(layout) {
+    const l = (layout && layout.labels && layout.labels[lang]) || {};
+    return { name: l.name || layout.name, description: l.description || layout.description || '' };
   }
 
   // ---- messages flash ------------------------------------------------------------
@@ -167,7 +190,7 @@ window.App = (() => {
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'fermer';
-    close.setAttribute('aria-label', 'Fermer le message');
+    close.setAttribute('aria-label', t('common.closeMessage'));
     close.textContent = '×';
     close.addEventListener('click', () => el.remove());
     el.appendChild(close);
@@ -176,12 +199,12 @@ window.App = (() => {
   }
 
   function flashError(err) {
-    flash('erreur', frenchMessage(err));
+    flash('erreur', errorMessage(err));
   }
 
   // ---- modale de confirmation ------------------------------------------------------
   // confirm({titre, texte, oui, danger}) → Promise<boolean>. Remplace confirm().
-  function confirmDialog({ titre = 'Êtes-vous sûr ?', texte = '', oui = 'Oui', danger = false } = {}) {
+  function confirmDialog({ titre = t('common.areYouSure'), texte = '', oui = t('common.yes'), danger = false } = {}) {
     const dlg = document.getElementById('confirmation');
     if (!dlg) return Promise.resolve(window.confirm(texte || titre));
     dlg.querySelector('#confirmation-titre').textContent = titre;
@@ -211,7 +234,7 @@ window.App = (() => {
 
   // ---- modale de saisie ---------------------------------------------------------------
   // promptText({titre, label, valeur, type, oui}) → Promise<string|null>. Remplace prompt().
-  function promptText({ titre = '', label = '', valeur = '', type = 'text', oui = 'Valider' } = {}) {
+  function promptText({ titre = '', label = '', valeur = '', type = 'text', oui = t('common.confirm') } = {}) {
     const dlg = document.getElementById('saisie');
     if (!dlg) return Promise.resolve(window.prompt(label || titre, valeur));
     dlg.querySelector('#saisie-titre').textContent = titre;
@@ -249,7 +272,7 @@ window.App = (() => {
   // Erreur inline (formulaires) — conservé pour compatibilité.
   function showError(el, err) {
     if (!el) return flashError(err);
-    el.textContent = frenchMessage(err);
+    el.textContent = errorMessage(err);
     el.hidden = false;
   }
 
@@ -298,20 +321,20 @@ window.App = (() => {
       .map((u) => {
         const self = session && session.user.id === u.id;
         return `<tr data-id="${u.id}">
-          <td><strong>${esc(u.username)}</strong>${self ? ' <em>(vous)</em>' : ''}</td>
+          <td><strong>${esc(u.username)}</strong>${self ? ` <em>${esc(t('users.you'))}</em>` : ''}</td>
           <td>
-            <select class="u-role" aria-label="Rôle de ${esc(u.username)}">
+            <select class="u-role" aria-label="${esc(t('users.roleOf', { name: u.username }))}">
               ${['viewer', 'editor', 'admin']
                 .map((r) => `<option value="${r}"${r === u.role ? ' selected' : ''}>${esc(roleLabel(r))}</option>`)
                 .join('')}
             </select>
           </td>
-          <td><span class="pill ${u.isActive ? 's-actif' : 's-inactif'}">${u.isActive ? 'Actif' : 'Désactivé'}</span></td>
+          <td><span class="pill ${u.isActive ? 's-actif' : 's-inactif'}">${esc(u.isActive ? t('users.statusActive') : t('users.statusDisabled'))}</span></td>
           <td class="mut" title="${esc(u.createdAt)}">${esc(formatDate(u.createdAt))}</td>
           <td>
-            <button class="u-toggle btn sec petit" type="button">${u.isActive ? 'Désactiver' : 'Réactiver'}</button>
-            <button class="u-password btn sec petit" type="button">Mot de passe…</button>
-            <button class="u-delete btn rouge petit" type="button">Supprimer</button>
+            <button class="u-toggle btn sec petit" type="button">${esc(u.isActive ? t('users.disable') : t('users.enable'))}</button>
+            <button class="u-password btn sec petit" type="button">${esc(t('users.passwordBtn'))}</button>
+            <button class="u-delete btn rouge petit" type="button">${esc(t('common.delete'))}</button>
           </td>
         </tr>`;
       })
@@ -321,40 +344,44 @@ window.App = (() => {
       const id = tr.dataset.id;
       const user = items.find((u) => String(u.id) === id);
       tr.querySelector('.u-role').addEventListener('change', (e) => {
-        patchUser(id, { role: e.target.value }, `Rôle de ${user.username} changé en « ${roleLabel(e.target.value)} ».`);
+        patchUser(id, { role: e.target.value }, t('users.roleChanged', { name: user.username, role: roleLabel(e.target.value) }));
       });
       tr.querySelector('.u-toggle').addEventListener('click', async () => {
         if (user.isActive) {
           const ok = await confirmDialog({
-            titre: `Désactiver ${user.username} ?`,
-            texte: 'Cette personne ne pourra plus se connecter. Vous pourrez la réactiver plus tard.',
-            oui: 'Oui, désactiver',
+            titre: t('users.disableTitle', { name: user.username }),
+            texte: t('users.disableText'),
+            oui: t('users.disableYes'),
             danger: true,
           });
           if (!ok) return;
         }
-        patchUser(id, { is_active: !user.isActive }, user.isActive ? `${user.username} est désactivé.` : `${user.username} est réactivé.`);
+        patchUser(
+          id,
+          { is_active: !user.isActive },
+          t(user.isActive ? 'users.disabled' : 'users.enabled', { name: user.username })
+        );
       });
       tr.querySelector('.u-password').addEventListener('click', async () => {
         const pw = await promptText({
-          titre: `Mot de passe de ${user.username}`,
-          label: 'Nouveau mot de passe (8 caractères minimum)',
+          titre: t('users.passwordTitle', { name: user.username }),
+          label: t('users.passwordLabel'),
           type: 'password',
-          oui: 'Changer le mot de passe',
+          oui: t('users.passwordSubmit'),
         });
-        if (pw) patchUser(id, { password: pw }, `Mot de passe de ${user.username} changé.`);
+        if (pw) patchUser(id, { password: pw }, t('users.passwordChanged', { name: user.username }));
       });
       tr.querySelector('.u-delete').addEventListener('click', async () => {
         const ok = await confirmDialog({
-          titre: `Supprimer ${user.username} ?`,
-          texte: 'Le compte est supprimé définitivement. Pour un départ temporaire, préférez « Désactiver ».',
-          oui: 'Oui, supprimer',
+          titre: t('users.deleteTitle', { name: user.username }),
+          texte: t('users.deleteText'),
+          oui: t('users.deleteYes'),
           danger: true,
         });
         if (!ok) return;
         api(`/api/users/${id}`, { method: 'DELETE' })
           .then(() => {
-            flash('ok', `${user.username} est supprimé.`);
+            flash('ok', t('users.deleted', { name: user.username }));
             return renderUsers();
           })
           .catch(flashError);
@@ -400,7 +427,7 @@ window.App = (() => {
         const name = form.username.value;
         form.reset();
         if (dlg && dlg.open) dlg.close();
-        flash('ok', `Utilisateur ${name} créé.`);
+        flash('ok', t('users.created', { name }));
         await renderUsers();
       } catch (err) {
         showError(errEl, err);
@@ -408,7 +435,24 @@ window.App = (() => {
     });
   }
 
+  // Sélecteur NL / FR du menu : mémorisé pour l'utilisateur (PATCH /api/me),
+  // puis la page est rechargée dans la nouvelle langue.
+  function initLangSwitch() {
+    document.querySelectorAll('aside#menu .lang-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (btn.dataset.lang === lang) return;
+        try {
+          await api('/api/me', { method: 'PATCH', body: { lang: btn.dataset.lang } });
+          window.location.reload();
+        } catch (err) {
+          flashError(err);
+        }
+      });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
+    initLangSwitch();
     initLogout();
     initLoginPage();
     initAdminUsersPage();
@@ -423,7 +467,13 @@ window.App = (() => {
     showError,
     flash,
     flashError,
-    frenchMessage,
+    errorMessage,
+    t,
+    lang,
+    locale,
+    formatNumber,
+    formatDay,
+    layoutLabel,
     confirm: confirmDialog,
     promptText,
     formatDate,

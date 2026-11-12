@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="nl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Utilisateurs — Tapigro Boeken</title>
+  <title>Gebruikers — Tapigro Boeken</title>
   <link rel="stylesheet" href="css/base.css">
   
   
   
   <link rel="icon" href="assets/logo-tapigro.png">
   <link rel="stylesheet" href="demo/demo.css">
+  <script src="i18n/nl.js"></script>
   <script src="demo/shared.js"></script>
   <script src="data/catalog.js"></script>
   <script src="demo/urls.js"></script>
@@ -20,39 +21,41 @@
   <div id="app">
     
     <aside id="menu">
-      <a class="logo" href="index.html" title="Tapigro Boeken — tableau de bord">
+      <a class="logo" href="index.html" title="Tapigro Boeken — dashboard">
         <img src="assets/logo-tapigro.png" alt="Tapigro" class="logo-img">
-        <span class="logo-txt">Boeken<small>catalogues &amp; étiquettes</small></span>
+        <span class="logo-txt">Boeken<small>catalogi &amp; etiketten</small></span>
       </a>
       <nav>
-        <a href="index.html" class="" title="Tableau de bord"><span class="ico">🏠</span><span class="lbl">Tableau de bord</span></a>
-        <a href="products.html" class="" title="Produits"><span class="ico">📦</span><span class="lbl">Produits</span></a>
+        <a href="index.html" class="" title="Dashboard"><span class="ico">🏠</span><span class="lbl">Dashboard</span></a>
+        <a href="products.html" class="" title="Producten"><span class="ico">📦</span><span class="lbl">Producten</span></a>
         <a href="books.html" class="" title="Boeken"><span class="ico">📚</span><span class="lbl">Boeken</span></a>
         
-        <a href="imports.html" class="" title="Imports"><span class="ico">⬆️</span><span class="lbl">Imports</span></a>
-        <a href="users.html" class="on" title="Utilisateurs"><span class="ico">👤</span><span class="lbl">Utilisateurs</span></a>
+        <a href="imports.html" class="" title="Importeren"><span class="ico">⬆️</span><span class="lbl">Importeren</span></a>
+        <a href="users.html" class="on" title="Gebruikers"><span class="ico">👤</span><span class="lbl">Gebruikers</span></a>
         
       </nav>
       <div class="qui">
-        <span class="qui-nom">Démo</span>
-        <span class="qui-role">Administrateur</span>
-        <button id="logout-btn" type="button" class="lien" title="Se déconnecter"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Se déconnecter</span></button>
+        <span class="qui-nom">Demo</span>
+        <span class="qui-role">Beheerder</span>
+        <button id="logout-btn" type="button" class="lien" title="Afmelden"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Afmelden</span></button>
+        
+        <span class="langues" role="group" aria-label="Taal van de toepassing">
+          <button type="button" class="lien lang-btn on" data-lang="nl" lang="nl" aria-pressed="true">NL</button><button type="button" class="lien lang-btn" data-lang="fr" lang="fr" aria-pressed="false">FR</button>
+        </span>
       </div>
     </aside>
     
     <main class="container">
       <div id="flash" aria-live="polite"></div>
       <div class="entete">
-  <h1>Utilisateurs</h1>
+  <h1>Gebruikers</h1>
 </div>
-<p class="sub">Qui peut se connecter, et avec quels droits.</p>
+<p class="sub">Wie zich kan aanmelden, en met welke rechten.</p>
 <div class="panel demo-indispo">
-  <h2>Non disponible dans la démo</h2>
-  <p>Cette version de démonstration fonctionne entièrement dans votre navigateur, sans serveur :
-    la démo n’a ni comptes ni connexion — vous y êtes « Démo », avec tous les droits.</p>
-  <p>Vous pouvez essayer tout le reste : le <a href="index.html">tableau de bord</a>, les
-    <a href="products.html">produits</a> et les <a href="books.html">boeken</a>
-    (création, glisser-déposer, couverture, export PDF).</p>
+  <h2>Niet beschikbaar in de demo</h2>
+  <p>Deze demoversie werkt volledig in uw browser, zonder server: de demo heeft geen accounts en geen aanmelding — u bent hier ‘Demo’, met alle rechten.</p>
+  <p>U kunt al de rest uitproberen: het dashboard, de producten en de boeken (aanmaken, slepen, omslag, PDF-export).</p>
+  <p><a href="index.html">Dashboard</a> · <a href="products.html">Producten</a> · <a href="books.html">Boeken</a></p>
 </div>
 
     </main>
@@ -60,11 +63,11 @@
 
   
   <dialog id="confirmation" class="modale" aria-labelledby="confirmation-titre">
-    <h2 id="confirmation-titre">Êtes-vous sûr ?</h2>
+    <h2 id="confirmation-titre">Weet u het zeker?</h2>
     <p id="confirmation-texte"></p>
     <div class="actions">
-      <button type="button" class="btn sec" data-reponse="non" autofocus>Non, annuler</button>
-      <button type="button" class="btn" data-reponse="oui">Oui</button>
+      <button type="button" class="btn sec" data-reponse="non" autofocus>Nee, annuleren</button>
+      <button type="button" class="btn" data-reponse="oui">Ja</button>
     </div>
   </dialog>
 
@@ -75,12 +78,13 @@
       <label id="saisie-label" for="saisie-champ"></label>
       <input id="saisie-champ" type="text" maxlength="200">
       <div class="actions">
-        <button type="button" class="btn sec" data-reponse="non">Annuler</button>
-        <button type="submit" class="btn" data-reponse="oui">Valider</button>
+        <button type="button" class="btn sec" data-reponse="non">Annuleren</button>
+        <button type="submit" class="btn" data-reponse="oui">Bevestigen</button>
       </div>
     </form>
   </dialog>
 
+  
   <script src="js/common.js"></script>
 </body>
 </html>

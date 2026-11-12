@@ -61,11 +61,11 @@
 
     // Cartes-compteurs = raccourcis de filtre (A5) ; la carte active est marquée.
     const CARDS = [
-      { label: 'Produits', stat: 'total', filter: { active: 'all', photo: 'all', barcode: 'all' } },
-      { label: 'Actifs', stat: 'active', filter: { active: '1', photo: 'all', barcode: 'all' } },
-      { label: 'Retirés du catalogue', stat: 'inactive', filter: { active: '0', photo: 'all', barcode: 'all' } },
-      { label: 'Sans photo', stat: 'withoutPhoto', aFaire: true, filter: { active: '1', photo: '0', barcode: 'all' } },
-      { label: 'Sans code-barres', stat: 'withoutBarcode', aFaire: true, filter: { active: '1', photo: 'all', barcode: '0' } },
+      { label: App.t('common.products'), stat: 'total', filter: { active: 'all', photo: 'all', barcode: 'all' } },
+      { label: App.t('common.activeMany'), stat: 'active', filter: { active: '1', photo: 'all', barcode: 'all' } },
+      { label: App.t('common.retiredMany'), stat: 'inactive', filter: { active: '0', photo: 'all', barcode: 'all' } },
+      { label: App.t('common.withoutPhoto'), stat: 'withoutPhoto', aFaire: true, filter: { active: '1', photo: '0', barcode: 'all' } },
+      { label: App.t('common.withoutBarcode'), stat: 'withoutBarcode', aFaire: true, filter: { active: '1', photo: 'all', barcode: '0' } },
     ];
 
     function renderCards() {
@@ -93,7 +93,7 @@
       tr.className = 'lien';
       const thumb = p.hasPhoto
         ? `<img class="thumb" src="${esc(App.url(`/img/${encodeURIComponent(p.code)}/thumb`))}" alt="" loading="lazy">`
-        : '<span class="thumb absente" title="Pas de photo">·</span>';
+        : `<span class="thumb absente" title="${esc(App.t('products.noPhoto'))}">·</span>`;
       tr.innerHTML = `
         <td class="vignette">${thumb}</td>
         <td><a href="${esc(App.url(`/products/${p.id}`))}"><strong>${esc(p.code)}</strong></a></td>
@@ -101,10 +101,10 @@
         <td>${esc(p.category)}</td>
         <td>${esc(p.group)}</td>
         <td>${esc(p.unit)}</td>
-        <td class="num">${p.minimumStock == null ? '<span class="mut">—</span>' : esc(p.minimumStock)}</td>
-        <td><span class="pill ${p.isActive ? 's-actif' : 's-retire'}">${p.isActive ? 'Actif' : 'Retiré'}</span></td>
-        <td>${p.hasPhoto ? '<span class="tag" title="Photo disponible">📷</span>' : ''}${
-          p.hasBarcode ? '<span class="tag" title="Code-barres disponible">▮▮</span>' : ''
+        <td class="num">${p.minimumStock == null ? '<span class="mut">—</span>' : esc(App.formatNumber(p.minimumStock))}</td>
+        <td><span class="pill ${p.isActive ? 's-actif' : 's-retire'}">${esc(p.isActive ? App.t('common.active') : App.t('common.retired'))}</span></td>
+        <td>${p.hasPhoto ? `<span class="tag" title="${esc(App.t('products.photoAvailable'))}">📷</span>` : ''}${
+          p.hasBarcode ? `<span class="tag" title="${esc(App.t('products.barcodeAvailable'))}">▮▮</span>` : ''
         }</td>`;
       tr.addEventListener('click', (e) => {
         if (!e.target.closest('a')) window.location.href = App.url(`/products/${p.id}`);
@@ -131,12 +131,12 @@
       table.hidden = list.items.length === 0;
       emptyEl.hidden = !(s.total === 0);
       noResEl.hidden = !(s.total > 0 && list.items.length === 0);
-      countEl.textContent = `${total} résultat${total > 1 ? 's' : ''}`;
+      countEl.textContent = App.t('products.count', { n: total });
       clearBtn.hidden = !hasFilters();
       const pages = Math.max(1, Math.ceil(total / LIMIT));
       const page = Math.floor(state.offset / LIMIT) + 1;
       pager.hidden = pages <= 1;
-      pagerInfo.textContent = `page ${page} / ${pages}`;
+      pagerInfo.textContent = App.t('products.pagerInfo', { page, pages });
       document.getElementById('pager-prev').disabled = page <= 1;
       document.getElementById('pager-next').disabled = page >= pages;
     }
@@ -235,17 +235,16 @@
     let canEdit = false;
 
     const SOURCE_LABELS = {
-      import: 'Importé d’Optedo (export Excel)',
-      manual: 'Ajouté à la main dans l’app',
+      import: App.t('product.sourceImport'),
+      manual: App.t('product.sourceManual'),
     };
 
     function fill() {
       document.getElementById('fiche-titre').textContent = `${product.code} — ${product.name}`;
       document.title = `${product.code} — ${product.name} — Tapigro Boeken`;
       const sub = document.getElementById('fiche-sub');
-      sub.textContent = product.isActive
-        ? (SOURCE_LABELS[product.source] || product.source) + '.'
-        : (SOURCE_LABELS[product.source] || product.source) + ' — retiré du catalogue.';
+      const source = SOURCE_LABELS[product.source] || product.source;
+      sub.textContent = App.t(product.isActive ? 'product.subActive' : 'product.subRetired', { source });
       document.getElementById('fp-code').value = product.code;
       document.getElementById('fp-name').value = product.name;
       document.getElementById('fp-category').value = product.category;
@@ -254,19 +253,21 @@
       document.getElementById('fp-minstock').value = product.minimumStock == null ? '' : product.minimumStock;
 
       const meta = document.getElementById('fiche-meta');
-      const lines = [`Créé le ${App.formatDate(product.createdAt)} · dernière modification ${App.relativeDate(product.updatedAt)}.`];
+      const lines = [
+        App.t('product.meta', {
+          created: App.formatDate(product.createdAt),
+          modified: App.relativeDate(product.updatedAt),
+        }),
+      ];
       if (product.modifiedManuallyAt) {
-        lines.push(
-          product.source === 'import'
-            ? `Modifié à la main le ${App.formatDate(product.modifiedManuallyAt)} : les imports Optedo ne modifient plus ce produit (la saisie manuelle gagne). « Rendre la main à Optedo » annule ce verrou.`
-            : `Modifié à la main le ${App.formatDate(product.modifiedManuallyAt)}.`
-        );
+        const date = App.formatDate(product.modifiedManuallyAt);
+        lines.push(App.t(product.source === 'import' ? 'product.metaLocked' : 'product.metaManual', { date }));
       } else if (product.source === 'import') {
-        lines.push('Jamais retouché dans l’app : les imports Optedo le tiennent à jour. Dès que vous modifiez un champ ici, la saisie manuelle gagne sur les imports suivants.');
+        lines.push(App.t('product.metaImport'));
       }
       meta.textContent = lines.join(' ');
 
-      toggleBtn.textContent = product.isActive ? 'Retirer du catalogue' : 'Remettre au catalogue';
+      toggleBtn.textContent = App.t(product.isActive ? 'product.retire' : 'product.reinstate');
       toggleBtn.classList.toggle('rouge', product.isActive);
       toggleBtn.classList.toggle('sec', !product.isActive);
       // Verrou « saisie manuelle » : n'existe que sur un produit importé retouché.
@@ -282,19 +283,17 @@
       if (has) {
         const img = document.createElement('img');
         img.src = App.url(`/img/${encodeURIComponent(product.code)}/${kind}?t=${Date.now()}`);
-        img.alt = kind === 'photo' ? `Photo de ${product.name}` : `Code-barres de ${product.name}`;
+        img.alt = App.t(kind === 'photo' ? 'product.photoAlt' : 'product.barcodeAlt', { name: product.name });
         zone.appendChild(img);
       } else {
         const ph = document.createElement('div');
         ph.className = 'absente';
-        ph.textContent = kind === 'photo' ? 'Pas encore de photo' : 'Pas encore de code-barres';
+        ph.textContent = App.t(kind === 'photo' ? 'product.noPhotoYet' : 'product.noBarcodeYet');
         zone.appendChild(ph);
       }
       if (canEdit) {
         const cap = document.createElement('figcaption');
-        cap.textContent = has
-          ? 'Choisissez un fichier pour la remplacer (png, jpg, webp).'
-          : 'Choisissez un fichier pour l’ajouter (png, jpg, webp).';
+        cap.textContent = App.t(has ? 'product.chooseReplace' : 'product.chooseAdd');
         zone.appendChild(cap);
       }
     }
@@ -314,7 +313,7 @@
       const min = raw === '' ? null : Number(raw);
       if (min !== (product.minimumStock ?? null)) body.minimumStock = min;
       if (Object.keys(body).length === 0) {
-        App.flash('info', 'Aucune modification.');
+        App.flash('info', App.t('product.noChange'));
         return;
       }
       try {
@@ -322,11 +321,11 @@
         product = res.product;
         fill();
         if (!res.changed) {
-          App.flash('info', 'Aucune modification.');
+          App.flash('info', App.t('product.noChange'));
           return;
         }
         const n = Object.keys(body).length;
-        App.flash('ok', `Fiche enregistrée (${n} modification${n > 1 ? 's' : ''}).`);
+        App.flash('ok', App.t('product.saved', { n }));
       } catch (err) {
         App.flashError(err);
       }
@@ -335,9 +334,9 @@
     async function toggleActive() {
       if (product.isActive) {
         const ok = await App.confirm({
-          titre: `Retirer « ${product.name} » du catalogue ?`,
-          texte: 'Le produit n’apparaîtra plus dans les listes par défaut ni dans le panneau de l’éditeur. Rien n’est supprimé : vous pourrez le remettre au catalogue.',
-          oui: 'Oui, retirer',
+          titre: App.t('product.retireConfirmTitle', { name: product.name }),
+          texte: App.t('product.retireConfirmText'),
+          oui: App.t('product.retireConfirmYes'),
           danger: true,
         });
         if (!ok) return;
@@ -348,7 +347,7 @@
           body: { isActive: !product.isActive },
         }));
         fill();
-        App.flash('ok', product.isActive ? 'Produit remis au catalogue.' : 'Produit retiré du catalogue.');
+        App.flash('ok', App.t(product.isActive ? 'product.reinstated' : 'product.retired'));
       } catch (err) {
         App.flashError(err);
       }
@@ -356,15 +355,15 @@
 
     async function release() {
       const ok = await App.confirm({
-        titre: 'Rendre la main à Optedo ?',
-        texte: 'Au prochain import Excel, les valeurs de ce produit seront remplacées par celles d’Optedo (et il sera retiré du catalogue s’il n’est plus dans le fichier). Vos corrections faites ici seront perdues à ce moment-là.',
-        oui: 'Oui, rendre la main',
+        titre: App.t('product.releaseConfirmTitle'),
+        texte: App.t('product.releaseConfirmText'),
+        oui: App.t('product.releaseConfirmYes'),
       });
       if (!ok) return;
       try {
         ({ product } = await App.api(`/api/products/${id}/release`, { method: 'POST' }));
         fill();
-        App.flash('ok', 'Ce produit sera de nouveau mis à jour par les imports Optedo.');
+        App.flash('ok', App.t('product.released'));
       } catch (err) {
         App.flashError(err);
       }
@@ -380,7 +379,7 @@
         try {
           ({ product } = await App.apiUpload(`/api/products/${id}/${kind}`, fd));
           fill();
-          App.flash('ok', kind === 'photo' ? 'Photo enregistrée.' : 'Code-barres enregistré.');
+          App.flash('ok', App.t(kind === 'photo' ? 'product.photoSaved' : 'product.barcodeSaved'));
         } catch (err) {
           App.flashError(err);
         } finally {

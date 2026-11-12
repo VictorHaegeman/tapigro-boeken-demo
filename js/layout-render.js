@@ -47,6 +47,14 @@
 
   // URL d'un fichier servi par l'app (« /img/… », « /assets/… ») : traduite par
   // App.url quand il existe (navigateur, cf. common.js), inchangée sinon (Node).
+  // Indication grisée d'un textSlot vide : chaîne, ou objet par langue.
+  function placeholderText(ph) {
+    if (!ph || typeof ph === 'string') return ph || '';
+    const app = typeof self !== 'undefined' ? self.App : null;
+    const lang = app && app.lang ? app.lang : 'nl';
+    return ph[lang] || ph.nl || Object.values(ph)[0] || '';
+  }
+
   function appUrl(path) {
     const app = typeof self !== 'undefined' ? self.App : null;
     return app && typeof app.url === 'function' ? app.url(path) : path;
@@ -145,7 +153,9 @@
         el.dataset.slot = spec.slot;
         // Indication À L'ÉCRAN pour un texte vide (l'éditeur l'affiche en
         // grisé via CSS) — jamais imprimée : le PDF ignore `placeholder`.
-        if (spec.placeholder) el.dataset.placeholder = spec.placeholder;
+        // `placeholder` : texte, ou {nl, fr} selon la langue de l'interface.
+        const ph = placeholderText(spec.placeholder);
+        if (ph) el.dataset.placeholder = ph;
         const texts = ctx.texts || {};
         el.textContent =
           Object.prototype.hasOwnProperty.call(texts, spec.slot) ? texts[spec.slot] : spec.default || '';

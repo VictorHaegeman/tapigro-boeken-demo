@@ -28,21 +28,23 @@
     const zone = document.getElementById('home-products-cards');
     const s = await App.api('/api/products/stats');
     zone.append(
-      card('/products?active=all', 'Produits', s.total),
-      card('/products', 'Actifs', s.active),
-      card('/products?active=0', 'Retirés du catalogue', s.inactive),
-      card('/products?photo=0', 'Sans photo', s.withoutPhoto, { aFaire: true }),
-      card('/products?barcode=0', 'Sans code-barres', s.withoutBarcode, { aFaire: true })
+      card('/products?active=all', App.t('common.products'), s.total),
+      card('/products', App.t('common.activeMany'), s.active),
+      card('/products?active=0', App.t('common.retiredMany'), s.inactive),
+      card('/products?photo=0', App.t('common.withoutPhoto'), s.withoutPhoto, { aFaire: true }),
+      card('/products?barcode=0', App.t('common.withoutBarcode'), s.withoutBarcode, { aFaire: true })
     );
   }
 
   async function renderBooks() {
-    const { items } = await App.api('/api/books');
+    const [{ items }, { layouts }] = await Promise.all([App.api('/api/books'), App.api('/api/layouts')]);
+    // Nom du format dans la langue de l'interface (labels des layouts JSON).
+    const layoutNames = Object.fromEntries(layouts.map((l) => [l.id, App.layoutLabel(l).name]));
     renderRecent(items).catch(App.flashError);
     const cards = document.getElementById('home-books-cards');
     const last = items[0]; // listBooks trie par updated_at desc
-    cards.append(card('/books', 'Boeken', items.length, {
-      t: last ? `dernier modifié ${App.relativeDate(last.updatedAt)}` : undefined,
+    cards.append(card('/books', App.t('home.cardBooks'), items.length, {
+      t: last ? App.t('home.lastModified', { when: App.relativeDate(last.updatedAt) }) : undefined,
     }));
 
     const table = document.getElementById('home-books-table');
@@ -61,7 +63,7 @@
       link.appendChild(strong);
       tdName.appendChild(link);
       const tdLayout = document.createElement('td');
-      tdLayout.textContent = b.layoutId === 'labels-10' ? 'Étiquettes magasin' : 'Catalogue de stock';
+      tdLayout.textContent = layoutNames[b.layoutId] || b.layoutId;
       const tdItems = document.createElement('td');
       tdItems.textContent = String(b.itemCount);
       const tdDate = document.createElement('td');
@@ -72,7 +74,7 @@
       const open = document.createElement('a');
       open.className = 'btn sec petit';
       open.href = App.url(`/books/${b.id}/edit`);
-      open.textContent = 'Ouvrir';
+      open.textContent = App.t('common.open');
       tdOpen.appendChild(open);
       tr.append(tdName, tdLayout, tdItems, tdDate, tdOpen);
       tr.addEventListener('click', (e) => {
@@ -88,13 +90,13 @@
     const { items: products } = await App.api('/api/products?sort=updated&active=all&limit=5');
     const rows = [
       ...products.map((p) => ({
-        kind: '📦 Produit',
+        kind: App.t('home.kindProduct'),
         href: App.url(`/products/${p.id}`),
         label: `${p.code} — ${p.name}`,
         date: p.updatedAt,
       })),
       ...booksItems.slice(0, 5).map((b) => ({
-        kind: '📚 Boek',
+        kind: App.t('home.kindBook'),
         href: App.url(`/books/${b.id}/edit`),
         label: b.name,
         date: b.updatedAt,
@@ -146,12 +148,12 @@
     const it = items[0];
     const zone = document.getElementById('home-imports-cards');
     zone.append(
-      card('/imports', 'Dernier import', App.relativeDate(it.startedAt), {
+      card('/imports', App.t('home.lastImport'), App.relativeDate(it.startedAt), {
         t: it.kind === 'excel'
-          ? `${it.created} ajoutés, ${it.updated} mis à jour, ${it.deactivated} masqués`
-          : `images — ${it.fileName}`,
+          ? App.t('home.excelSummary', { created: it.created, updated: it.updated, deactivated: it.deactivated })
+          : App.t('home.imagesSummary', { file: it.fileName }),
       }),
-      card('/imports', 'Imports au total', total)
+      card('/imports', App.t('home.importsTotal'), total)
     );
   }
 

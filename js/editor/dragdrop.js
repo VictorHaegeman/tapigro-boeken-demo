@@ -101,9 +101,12 @@
   // drag vers une autre page et doit alors en montrer une de plus).
   function fillEmptySlots(gridEl, capacity) {
     gridEl.dataset.capacity = String(capacity);
+    // Invite de la première case libre, dans la langue de l'interface.
+    const hint = typeof self !== 'undefined' && self.App ? self.App.t('editor.dropHere') : '';
     for (let i = 0; i < capacity; i++) {
       const slot = document.createElement('div');
       slot.className = EMPTY_CLASS;
+      slot.dataset.hint = hint;
       slot.setAttribute('aria-hidden', 'true');
       gridEl.appendChild(slot);
     }

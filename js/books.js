@@ -42,11 +42,12 @@
       }
       const text = document.createElement('span');
       text.className = 'format-txt';
+      const names = App.layoutLabel(layout); // nom et explication dans la langue de l'interface
       const name = document.createElement('strong');
-      name.textContent = layout.name;
+      name.textContent = names.name;
       const desc = document.createElement('span');
       desc.className = 'mut';
-      desc.textContent = layout.description || '';
+      desc.textContent = names.description;
       text.append(name, desc);
       label.append(radio, mini, text);
       return label;
@@ -77,8 +78,8 @@
       if (b.itemCount === 0) {
         const pill = document.createElement('span');
         pill.className = 'pill s-retire';
-        pill.title = 'Ouvrez le boek pour y glisser des produits';
-        pill.textContent = 'vide';
+        pill.title = App.t('books.emptyTitle');
+        pill.textContent = App.t('common.empty');
         tdItems.appendChild(pill);
       } else {
         tdItems.textContent = String(b.itemCount);
@@ -93,12 +94,12 @@
       const open = document.createElement('a');
       open.className = 'btn sec petit';
       open.href = href;
-      open.textContent = 'Ouvrir';
+      open.textContent = App.t('common.open');
       tdActions.appendChild(open);
       const pdf = document.createElement('a');
       pdf.className = 'btn sec petit';
       pdf.href = App.url(`/api/books/${b.id}/pdf`);
-      pdf.textContent = 'Exporter en PDF';
+      pdf.textContent = App.t('books.exportPdf');
       tdActions.appendChild(pdf);
       if (canEdit) {
         const mk = (label, fn, danger) => {
@@ -109,41 +110,41 @@
           btn.addEventListener('click', fn);
           tdActions.appendChild(btn);
         };
-        mk('Renommer', async () => {
+        mk(App.t('books.rename'), async () => {
           const name = await App.promptText({
-            titre: `Renommer « ${b.name} »`,
-            label: 'Nouveau nom',
+            titre: App.t('books.renameTitle', { name: b.name }),
+            label: App.t('books.newName'),
             valeur: b.name,
-            oui: 'Renommer',
+            oui: App.t('books.rename'),
           });
           if (name && name.trim() && name.trim() !== b.name) {
             App.api(`/api/books/${b.id}`, { method: 'PATCH', body: { name: name.trim() } })
               .then(() => {
-                App.flash('ok', `Boek renommé en « ${name.trim()} ».`);
+                App.flash('ok', App.t('books.renamed', { name: name.trim() }));
                 return refresh();
               })
               .catch(App.flashError);
           }
         });
-        mk('Dupliquer', () => {
+        mk(App.t('books.duplicate'), () => {
           App.api(`/api/books/${b.id}/duplicate`, { method: 'POST' })
             .then(() => {
-              App.flash('ok', `Boek « ${b.name} » dupliqué.`);
+              App.flash('ok', App.t('books.duplicated', { name: b.name }));
               return refresh();
             })
             .catch(App.flashError);
         });
-        mk('Supprimer', async () => {
+        mk(App.t('common.delete'), async () => {
           const ok = await App.confirm({
-            titre: `Supprimer « ${b.name} » ?`,
-            texte: 'Les produits ne sont pas supprimés, seulement ce boek. Cette action est définitive.',
-            oui: 'Oui, supprimer',
+            titre: App.t('books.deleteTitle', { name: b.name }),
+            texte: App.t('books.deleteText'),
+            oui: App.t('books.deleteYes'),
             danger: true,
           });
           if (!ok) return;
           App.api(`/api/books/${b.id}`, { method: 'DELETE' })
             .then(() => {
-              App.flash('ok', `Boek « ${b.name} » supprimé.`);
+              App.flash('ok', App.t('books.deleted', { name: b.name }));
               return refresh();
             })
             .catch(App.flashError);
@@ -165,7 +166,7 @@
       table.hidden = visible.length === 0;
       emptyEl.hidden = items.length > 0;
       noResEl.hidden = !(items.length > 0 && visible.length === 0);
-      countEl.textContent = `${visible.length} boek${visible.length > 1 ? 'en' : ''}`;
+      countEl.textContent = App.t('books.count', { n: visible.length });
     }
 
     async function refresh() {
@@ -177,7 +178,7 @@
       const [me, layoutsRes] = await Promise.all([App.fetchMe(), App.api('/api/layouts')]);
       canEdit = Boolean(me && (me.user.role === 'editor' || me.user.role === 'admin'));
       layoutsRes.layouts.forEach((layout, i) => {
-        layoutNames[layout.id] = layout.name;
+        layoutNames[layout.id] = App.layoutLabel(layout).name;
         layoutsZone.appendChild(layoutCard(layout, i === 0));
       });
       openBtn.hidden = !canEdit;

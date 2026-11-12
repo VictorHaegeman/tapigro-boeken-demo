@@ -221,15 +221,15 @@
         const blankBtn = document.createElement('button');
         blankBtn.type = 'button';
         blankBtn.className = 'btn sec petit';
-        blankBtn.textContent = '+ page blanche';
-        blankBtn.title = 'Insérer une page blanche intercalaire après cette page';
+        blankBtn.textContent = App.t('editor.addBlank');
+        blankBtn.title = App.t('editor.addBlankTitle');
         blankBtn.addEventListener('click', () => apiAddBlankPage(page.pageNo));
         actions.appendChild(blankBtn);
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
         delBtn.className = 'btn sec petit';
-        delBtn.textContent = 'Supprimer';
-        delBtn.title = 'Supprimer cette page (refusé si elle contient des produits)';
+        delBtn.textContent = App.t('editor.deletePage');
+        delBtn.title = App.t('editor.deletePageTitle');
         delBtn.addEventListener('click', () => apiDeletePage(page.id));
         actions.appendChild(delBtn);
         wrap.appendChild(actions);
@@ -256,9 +256,9 @@
           slotEl.classList.add('editable');
           slotEl.contentEditable = 'true';
           slotEl.spellcheck = false;
-          slotEl.title = 'Cliquez pour modifier';
+          slotEl.title = App.t('editor.clickToEdit');
           slotEl.setAttribute('role', 'textbox');
-          slotEl.setAttribute('aria-label', slotEl.dataset.placeholder || 'Texte de la page');
+          slotEl.setAttribute('aria-label', slotEl.dataset.placeholder || App.t('editor.pageText'));
           slotEl.addEventListener('input', () => {
             const text = slotEl.innerText.replace(/\n$/, '');
             // Un contenteditable « vidé » garde souvent un <br> : on le retire
@@ -279,8 +279,8 @@
       const strong = document.createElement('strong');
       strong.textContent = caption;
       const hint = document.createElement('span');
-      hint.textContent = readOnly ? ' — page fixe' : ' — page fixe, texte modifiable';
-      cap.title = 'Page fixe : on ne peut pas y déposer de produit, seulement modifier ses textes';
+      hint.textContent = App.t(readOnly ? 'editor.fixedHintReadOnly' : 'editor.fixedHint');
+      cap.title = App.t('editor.fixedTitle');
       cap.append(lock, strong, hint);
       wrap.dataset.key = `fixed:${key}`; // repère de défilement (scroll-anchor.js)
       fixedCache.set(key, { scale, texts: book.texts, wrap });
@@ -304,14 +304,14 @@
         if (item.product.isActive === false) {
           const badge = document.createElement('div');
           badge.className = 'cell-inactive';
-          badge.textContent = 'Retiré du catalogue';
+          badge.textContent = App.t('editor.retired');
           cell.appendChild(badge);
         }
         if (!readOnly) {
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'cell-remove';
-          btn.title = 'Retirer';
+          btn.title = App.t('editor.remove');
           btn.textContent = '×';
           btn.addEventListener('click', () => apiRemove(item.id));
           cell.appendChild(btn);
@@ -326,7 +326,7 @@
       const { page: pageEl, grid } = LayoutRender.renderContentPage(layout, []);
       if (page.kind === 'blank') {
         pageEl.classList.add('lr-blank');
-        const blank = captionned(scaledBox(pageEl, scale), `${caption} (blanche)`, page);
+        const blank = captionned(scaledBox(pageEl, scale), App.t('editor.blankSuffix', { caption }), page);
         blank.dataset.key = `page:${page.id}`;
         return blank;
       }
@@ -344,7 +344,7 @@
             // grille adoptante) : aucun POST, re-rendu depuis l'état.
             onRefused: (reason) => {
               showError(
-                new Error(reason === 'full' ? 'Page pleine : dépôt refusé' : 'Dépôt annulé (hors page)')
+                new Error(App.t(reason === 'full' ? 'editor.pageFullRefused' : 'editor.dropOutside'))
               );
               renderSpreads();
             },
@@ -390,16 +390,16 @@
 
       // Double page fixe de tête (cover + page 2) selon le layout.
       const fixedHead = [];
-      const cover = buildFixedPage('cover', 'Couverture', scale);
+      const cover = buildFixedPage('cover', App.t('editor.cover'), scale);
       if (cover) fixedHead.push(cover);
-      const page2 = buildFixedPage('page2', 'Page 2 (intérieur de couverture)', scale);
+      const page2 = buildFixedPage('page2', App.t('editor.page2'), scale);
       if (page2) fixedHead.push(page2);
       if (fixedHead.length) spreads.push(fixedHead);
 
       // Pages de contenu par paires.
       let pair = [];
       book.pages.forEach((page, i) => {
-        pair.push(buildContentPage(page, `Page ${i + 1}`, scale, nextCells));
+        pair.push(buildContentPage(page, App.t('editor.pageN', { n: i + 1 }), scale, nextCells));
         if (pair.length === 2) {
           spreads.push(pair);
           pair = [];
@@ -408,7 +408,7 @@
       if (pair.length) spreads.push(pair);
 
       // Dos.
-      const back = buildFixedPage('back', 'Dos (dernière page)', scale);
+      const back = buildFixedPage('back', App.t('editor.backCover'), scale);
       if (back) spreads.push([back]);
 
       const fragment = document.createDocumentFragment();
@@ -488,7 +488,7 @@
         panel.total = total;
         for (const p of items) listEl.appendChild(productEntry(p));
         panel.offset += items.length;
-        countEl.textContent = `${panel.offset} / ${total} produits`;
+        countEl.textContent = App.t('editor.productCount', { shown: panel.offset, total });
         moreBtn.hidden = panel.offset >= total;
       } catch (err) {
         showError(err);
@@ -551,11 +551,9 @@
         const wanted = fixedToggle.checked;
         if (!wanted) {
           const ok = await App.confirm({
-            titre: 'Retirer la couverture, la page 2 et le dos ?',
-            texte:
-              'Le boek ne contiendra plus que ses pages de produits (à l’écran et dans le PDF). ' +
-              'Vos textes sont conservés : ils reviendront si vous remettez ces pages.',
-            oui: 'Oui, retirer',
+            titre: App.t('editor.removeFixedTitle'),
+            texte: App.t('editor.removeFixedText'),
+            oui: App.t('editor.removeFixedYes'),
           });
           if (!ok) {
             fixedToggle.checked = true;
@@ -572,7 +570,7 @@
           renderSpreads();
           App.flash(
             'ok',
-            wanted ? 'Couverture, page 2 et dos ajoutés.' : 'Couverture, page 2 et dos retirés (textes conservés).'
+            App.t(wanted ? 'editor.fixedAdded' : 'editor.fixedRemoved')
           );
         } catch (err) {
           fixedToggle.checked = Boolean(book.fixedPages);
@@ -593,7 +591,7 @@
       book = bookRes;
       readOnly = !me || me.user.role === 'viewer';
       layout = layoutsRes.layouts.find((l) => l.id === book.layoutId);
-      if (!layout) throw new Error(`Layout inconnu : ${book.layoutId}`);
+      if (!layout) throw new Error(App.t('editor.unknownLayout', { id: book.layoutId }));
 
       nameEl.value = book.name;
       if (readOnly) {

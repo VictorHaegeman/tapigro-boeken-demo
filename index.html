@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="nl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Tableau de bord — Tapigro Boeken</title>
+  <title>Dashboard — Tapigro Boeken</title>
   <link rel="stylesheet" href="css/base.css">
   
   
   <link rel="stylesheet" href="css/products.css">
   <link rel="icon" href="assets/logo-tapigro.png">
   <link rel="stylesheet" href="demo/demo.css">
+  <script src="i18n/nl.js"></script>
   <script src="demo/shared.js"></script>
   <script src="data/catalog.js"></script>
   <script src="demo/urls.js"></script>
@@ -20,70 +21,71 @@
   <div id="app">
     
     <aside id="menu">
-      <a class="logo" href="index.html" title="Tapigro Boeken — tableau de bord">
+      <a class="logo" href="index.html" title="Tapigro Boeken — dashboard">
         <img src="assets/logo-tapigro.png" alt="Tapigro" class="logo-img">
-        <span class="logo-txt">Boeken<small>catalogues &amp; étiquettes</small></span>
+        <span class="logo-txt">Boeken<small>catalogi &amp; etiketten</small></span>
       </a>
       <nav>
-        <a href="index.html" class="on" title="Tableau de bord"><span class="ico">🏠</span><span class="lbl">Tableau de bord</span></a>
-        <a href="products.html" class="" title="Produits"><span class="ico">📦</span><span class="lbl">Produits</span></a>
+        <a href="index.html" class="on" title="Dashboard"><span class="ico">🏠</span><span class="lbl">Dashboard</span></a>
+        <a href="products.html" class="" title="Producten"><span class="ico">📦</span><span class="lbl">Producten</span></a>
         <a href="books.html" class="" title="Boeken"><span class="ico">📚</span><span class="lbl">Boeken</span></a>
         
-        <a href="imports.html" class="" title="Imports"><span class="ico">⬆️</span><span class="lbl">Imports</span></a>
-        <a href="users.html" class="" title="Utilisateurs"><span class="ico">👤</span><span class="lbl">Utilisateurs</span></a>
+        <a href="imports.html" class="" title="Importeren"><span class="ico">⬆️</span><span class="lbl">Importeren</span></a>
+        <a href="users.html" class="" title="Gebruikers"><span class="ico">👤</span><span class="lbl">Gebruikers</span></a>
         
       </nav>
       <div class="qui">
-        <span class="qui-nom">Démo</span>
-        <span class="qui-role">Administrateur</span>
-        <button id="logout-btn" type="button" class="lien" title="Se déconnecter"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Se déconnecter</span></button>
+        <span class="qui-nom">Demo</span>
+        <span class="qui-role">Beheerder</span>
+        <button id="logout-btn" type="button" class="lien" title="Afmelden"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Afmelden</span></button>
+        
+        <span class="langues" role="group" aria-label="Taal van de toepassing">
+          <button type="button" class="lien lang-btn on" data-lang="nl" lang="nl" aria-pressed="true">NL</button><button type="button" class="lien lang-btn" data-lang="fr" lang="fr" aria-pressed="false">FR</button>
+        </span>
       </div>
     </aside>
     
     <main class="container">
       <div id="flash" aria-live="polite"></div>
       <div class="entete">
-  <h1>Bonjour, Démo</h1>
-  <a id="home-new-book" class="btn" href="books.html" hidden>+ Nouveau boek</a>
+  <h1>Goedendag, Demo</h1>
+  <a id="home-new-book" class="btn" href="books.html" hidden>+ Nieuw boek</a>
 </div>
-<p class="sub">Un boek est un catalogue ou un livret d'étiquettes prêt à imprimer :
-créez-en un, glissez-y des produits, puis exportez-le en PDF. Cliquez sur une carte pour voir le détail.</p>
+<p class="sub">Een boek is een catalogus of een etikettenboekje, klaar om te drukken: maak er een, sleep er producten in en exporteer het als PDF. Klik op een vak voor de details.</p>
 
 <div class="panel" id="home-products">
-  <div class="entete"><h2>📦 Produits</h2><a href="products.html">Voir le catalogue →</a></div>
+  <div class="entete"><h2>📦 Producten</h2><a href="products.html">Catalogus bekijken →</a></div>
   <div class="cards" id="home-products-cards"></div>
 </div>
 
 <div class="panel" id="home-books">
-  <div class="entete"><h2>📚 Boeken</h2><a href="books.html">Voir les boeken →</a></div>
+  <div class="entete"><h2>📚 Boeken</h2><a href="books.html">Boeken bekijken →</a></div>
   <div class="cards" id="home-books-cards"></div>
-  <h3>Reprendre mon travail</h3>
+  <h3>Verder werken</h3>
   <div class="tablewrap">
     <table class="table" id="home-books-table" hidden>
-      <thead><tr><th>Nom</th><th>Modèle</th><th>Produits</th><th>Modifié</th><th></th></tr></thead>
+      <thead><tr><th>Naam</th><th>Model</th><th>Producten</th><th>Gewijzigd</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
-  <p class="vide" id="home-books-empty" hidden>Vous n'avez pas encore de boek.
-    Cliquez sur « + Nouveau boek » pour commencer.</p>
+  <p class="vide" id="home-books-empty" hidden>U hebt nog geen boek. Klik op ‘+ Nieuw boek’ om te beginnen.</p>
 </div>
 
 <div class="panel" id="home-recent">
-  <div class="entete"><h2>🕘 Dernières modifications</h2></div>
+  <div class="entete"><h2>🕘 Recente wijzigingen</h2></div>
   <div class="tablewrap">
     <table class="table" id="home-recent-table" hidden>
-      <thead><tr><th>Type</th><th>Quoi</th><th>Modifié</th></tr></thead>
+      <thead><tr><th>Type</th><th>Wat</th><th>Gewijzigd</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
-  <p class="vide" id="home-recent-empty" hidden>Aucune modification pour l'instant.</p>
+  <p class="vide" id="home-recent-empty" hidden>Nog geen wijzigingen.</p>
 </div>
 
 <div class="panel" id="home-imports" hidden>
-  <div class="entete"><h2>⬆️ Imports</h2><a href="imports.html">Importer des données →</a></div>
+  <div class="entete"><h2>⬆️ Importeren</h2><a href="imports.html">Gegevens importeren →</a></div>
   <div class="cards" id="home-imports-cards"></div>
-  <p class="vide" id="home-imports-empty" hidden>Aucun import pour l'instant.
-    Importez votre export Excel Optedo pour remplir le catalogue.</p>
+  <p class="vide" id="home-imports-empty" hidden>Nog geen import. Importeer uw Excel-export van Optedo om de catalogus te vullen.</p>
 </div>
 
 <script src="js/home.js" defer></script>
@@ -93,11 +95,11 @@ créez-en un, glissez-y des produits, puis exportez-le en PDF. Cliquez sur une c
 
   
   <dialog id="confirmation" class="modale" aria-labelledby="confirmation-titre">
-    <h2 id="confirmation-titre">Êtes-vous sûr ?</h2>
+    <h2 id="confirmation-titre">Weet u het zeker?</h2>
     <p id="confirmation-texte"></p>
     <div class="actions">
-      <button type="button" class="btn sec" data-reponse="non" autofocus>Non, annuler</button>
-      <button type="button" class="btn" data-reponse="oui">Oui</button>
+      <button type="button" class="btn sec" data-reponse="non" autofocus>Nee, annuleren</button>
+      <button type="button" class="btn" data-reponse="oui">Ja</button>
     </div>
   </dialog>
 
@@ -108,12 +110,13 @@ créez-en un, glissez-y des produits, puis exportez-le en PDF. Cliquez sur une c
       <label id="saisie-label" for="saisie-champ"></label>
       <input id="saisie-champ" type="text" maxlength="200">
       <div class="actions">
-        <button type="button" class="btn sec" data-reponse="non">Annuler</button>
-        <button type="submit" class="btn" data-reponse="oui">Valider</button>
+        <button type="button" class="btn sec" data-reponse="non">Annuleren</button>
+        <button type="submit" class="btn" data-reponse="oui">Bevestigen</button>
       </div>
     </form>
   </dialog>
 
+  
   <script src="js/common.js"></script>
 </body>
 </html>

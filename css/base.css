@@ -108,6 +108,18 @@ aside#menu nav a:hover:not(.on) { background: #efeaea; }
 .qui-role { display: inline; }
 .qui .lien { display: block; padding: 0; }
 
+/* Choix de la langue (menu latéral, écran de connexion) : NL | FR discret. */
+.langues { display: flex; gap: 2px; margin-top: 6px; font-size: 11.5px; }
+.langues .lang-btn, .langues a {
+  padding: 1px 6px;
+  border-radius: 5px;
+  text-decoration: none;
+  color: var(--muted);
+}
+.langues .lang-btn.on, .langues a.on { background: var(--lg); color: var(--accent); font-weight: 700; }
+.langues .lang-btn:hover:not(.on), .langues a:hover:not(.on) { color: var(--accent); }
+.login .langues { justify-content: center; margin-top: 14px; }
+
 /* Bouton déguisé en lien (déconnexion, actions discrètes). */
 button.lien {
   background: none;
@@ -169,6 +181,9 @@ body[data-page="editor"] main.container { max-width: none; padding: 0; min-heigh
   body[data-page="editor"] .qui .lien { text-decoration: none; width: 100%; padding: 8px 0; border-radius: 8px; }
   body[data-page="editor"] .qui .lien:hover { background: #efeaea; }
   body[data-page="editor"] .qui .lien .ico { display: inline; font-size: 17px; }
+  /* NL | FR empilés dans le rail. */
+  body[data-page="editor"] .qui .langues { flex-direction: column; align-items: center; }
+  body[data-page="editor"] .qui .langues .lang-btn { width: auto; padding: 1px 4px; }
 }
 
 /* ---- titres, en-têtes de page -------------------------------------------- */

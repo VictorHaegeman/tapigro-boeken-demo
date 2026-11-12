@@ -1,15 +1,16 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="nl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Boeken — Tapigro Boeken</title>
+  <title>Mijn boeken — Tapigro Boeken</title>
   <link rel="stylesheet" href="css/base.css">
   
   
   
   <link rel="icon" href="assets/logo-tapigro.png">
   <link rel="stylesheet" href="demo/demo.css">
+  <script src="i18n/nl.js"></script>
   <script src="demo/shared.js"></script>
   <script src="data/catalog.js"></script>
   <script src="demo/urls.js"></script>
@@ -20,74 +21,75 @@
   <div id="app">
     
     <aside id="menu">
-      <a class="logo" href="index.html" title="Tapigro Boeken — tableau de bord">
+      <a class="logo" href="index.html" title="Tapigro Boeken — dashboard">
         <img src="assets/logo-tapigro.png" alt="Tapigro" class="logo-img">
-        <span class="logo-txt">Boeken<small>catalogues &amp; étiquettes</small></span>
+        <span class="logo-txt">Boeken<small>catalogi &amp; etiketten</small></span>
       </a>
       <nav>
-        <a href="index.html" class="" title="Tableau de bord"><span class="ico">🏠</span><span class="lbl">Tableau de bord</span></a>
-        <a href="products.html" class="" title="Produits"><span class="ico">📦</span><span class="lbl">Produits</span></a>
+        <a href="index.html" class="" title="Dashboard"><span class="ico">🏠</span><span class="lbl">Dashboard</span></a>
+        <a href="products.html" class="" title="Producten"><span class="ico">📦</span><span class="lbl">Producten</span></a>
         <a href="books.html" class="on" title="Boeken"><span class="ico">📚</span><span class="lbl">Boeken</span></a>
         
-        <a href="imports.html" class="" title="Imports"><span class="ico">⬆️</span><span class="lbl">Imports</span></a>
-        <a href="users.html" class="" title="Utilisateurs"><span class="ico">👤</span><span class="lbl">Utilisateurs</span></a>
+        <a href="imports.html" class="" title="Importeren"><span class="ico">⬆️</span><span class="lbl">Importeren</span></a>
+        <a href="users.html" class="" title="Gebruikers"><span class="ico">👤</span><span class="lbl">Gebruikers</span></a>
         
       </nav>
       <div class="qui">
-        <span class="qui-nom">Démo</span>
-        <span class="qui-role">Administrateur</span>
-        <button id="logout-btn" type="button" class="lien" title="Se déconnecter"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Se déconnecter</span></button>
+        <span class="qui-nom">Demo</span>
+        <span class="qui-role">Beheerder</span>
+        <button id="logout-btn" type="button" class="lien" title="Afmelden"><span class="ico" aria-hidden="true">⏻</span><span class="lbl">Afmelden</span></button>
+        
+        <span class="langues" role="group" aria-label="Taal van de toepassing">
+          <button type="button" class="lien lang-btn on" data-lang="nl" lang="nl" aria-pressed="true">NL</button><button type="button" class="lien lang-btn" data-lang="fr" lang="fr" aria-pressed="false">FR</button>
+        </span>
       </div>
     </aside>
     
     <main class="container">
       <div id="flash" aria-live="polite"></div>
       <div class="entete">
-  <h1>Mes boeken</h1>
-  <button id="book-create-open" type="button" class="btn" hidden>+ Nouveau boek</button>
+  <h1>Mijn boeken</h1>
+  <button id="book-create-open" type="button" class="btn" hidden>+ Nieuw boek</button>
 </div>
-<p class="sub">Un boek est un catalogue ou un livret d'étiquettes prêt à imprimer :
-ouvrez-le pour y glisser des produits, puis exportez-le en PDF. Cliquez sur une ligne pour l'ouvrir.</p>
+<p class="sub">Een boek is een catalogus of een etikettenboekje, klaar om te drukken: open het om er producten in te slepen en exporteer het daarna als PDF. Klik op een regel om het te openen.</p>
 
 <div class="toolbar">
-  <input type="search" id="books-search" placeholder="Nom du boek…" aria-label="Rechercher un boek">
+  <input type="search" id="books-search" placeholder="Naam van het boek…" aria-label="Een boek zoeken">
   <span class="count" id="books-count"></span>
 </div>
 
 <div class="tablewrap">
   <table id="books-table" class="table">
     <thead>
-      <tr><th>Nom</th><th>Modèle de mise en page</th><th class="num">Pages</th>
-          <th class="num">Produits</th><th>Modifié</th><th>Actions</th></tr>
+      <tr><th>Naam</th><th>Formaat</th><th class="num">Pagina&#39;s</th>
+          <th class="num">Producten</th><th>Gewijzigd</th><th>Acties</th></tr>
     </thead>
     <tbody></tbody>
   </table>
 </div>
-<p id="books-empty" class="vide" hidden>Vous n'avez pas encore de boek.
-Cliquez sur « + Nouveau boek » pour commencer.</p>
-<p id="books-noresult" class="vide" hidden>Aucun boek ne porte ce nom.</p>
+<p id="books-empty" class="vide" hidden>U hebt nog geen boek. Klik op ‘+ Nieuw boek’ om te beginnen.</p>
+<p id="books-noresult" class="vide" hidden>Geen enkel boek heeft deze naam.</p>
 
 <dialog id="book-create-dialog" class="modale large" aria-labelledby="book-create-titre">
-  <h2 id="book-create-titre">Nouveau boek</h2>
+  <h2 id="book-create-titre">Nieuw boek</h2>
   <form id="book-create-form" autocomplete="off">
-    <label for="nb-name">Nom
+    <label for="nb-name">Naam
       <input id="nb-name" name="name" type="text" required minlength="1" maxlength="200"
-             placeholder="ex. Catalogue peintres 2027">
+             placeholder="bv. Catalogus schilders 2027">
     </label>
     <fieldset class="choix-format">
-      <legend>Format des pages de produits</legend>
+      <legend>Formaat van de productpagina’s</legend>
       <div id="nb-layouts" class="formats"></div>
     </fieldset>
     <label class="case" for="nb-fixed">
       <input id="nb-fixed" name="fixedPages" type="checkbox" checked>
-      <span><strong>Avec couverture, page 2 et dos</strong><br>
-        <span class="mut">Trois pages fixes autour des produits : la couverture porte le nom du boek
-        (vous pourrez modifier les textes). Décochez pour une simple planche d'étiquettes.</span></span>
+      <span><strong>Met omslag, pagina 2 en achterkant</strong><br>
+        <span class="mut">Drie vaste pagina’s rond de producten: de omslag draagt de naam van het boek (u kunt de teksten aanpassen). Vink uit voor een eenvoudig etikettenvel.</span></span>
     </label>
     <p id="book-create-error" class="error" hidden></p>
     <div class="actions">
-      <button type="button" class="btn sec" data-reponse="non">Annuler</button>
-      <button type="submit" class="btn">Créer et ouvrir</button>
+      <button type="button" class="btn sec" data-reponse="non">Annuleren</button>
+      <button type="submit" class="btn">Aanmaken en openen</button>
     </div>
   </form>
 </dialog>
@@ -99,11 +101,11 @@ Cliquez sur « + Nouveau boek » pour commencer.</p>
 
   
   <dialog id="confirmation" class="modale" aria-labelledby="confirmation-titre">
-    <h2 id="confirmation-titre">Êtes-vous sûr ?</h2>
+    <h2 id="confirmation-titre">Weet u het zeker?</h2>
     <p id="confirmation-texte"></p>
     <div class="actions">
-      <button type="button" class="btn sec" data-reponse="non" autofocus>Non, annuler</button>
-      <button type="button" class="btn" data-reponse="oui">Oui</button>
+      <button type="button" class="btn sec" data-reponse="non" autofocus>Nee, annuleren</button>
+      <button type="button" class="btn" data-reponse="oui">Ja</button>
     </div>
   </dialog>
 
@@ -114,12 +116,13 @@ Cliquez sur « + Nouveau boek » pour commencer.</p>
       <label id="saisie-label" for="saisie-champ"></label>
       <input id="saisie-champ" type="text" maxlength="200">
       <div class="actions">
-        <button type="button" class="btn sec" data-reponse="non">Annuler</button>
-        <button type="submit" class="btn" data-reponse="oui">Valider</button>
+        <button type="button" class="btn sec" data-reponse="non">Annuleren</button>
+        <button type="submit" class="btn" data-reponse="oui">Bevestigen</button>
       </div>
     </form>
   </dialog>
 
+  
   <script src="js/common.js"></script>
 </body>
 </html>

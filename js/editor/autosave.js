@@ -14,6 +14,8 @@
   'use strict';
 
   const DEBOUNCE_MS = 800;
+  // Textes dans la langue de l'interface (App.t, common.js) ; clé brute en Node.
+  const tr = (key, params) => (typeof self !== 'undefined' && self.App ? self.App.t(key, params) : key);
 
   // statusEl : l'élément de l'indicateur. États : is-saved / is-saving / is-error.
   function createSaver(statusEl) {
@@ -27,13 +29,13 @@
       statusEl.classList.remove('is-saved', 'is-saving', 'is-error');
       if (error) {
         statusEl.classList.add('is-error');
-        statusEl.textContent = `Erreur : ${error.message}`;
+        statusEl.textContent = tr('common.error', { message: error.message });
       } else if (pending > 0 || dirty) {
         statusEl.classList.add('is-saving');
-        statusEl.textContent = 'Enregistrement…';
+        statusEl.textContent = tr('editor.saving');
       } else {
         statusEl.classList.add('is-saved');
-        statusEl.textContent = 'Enregistré';
+        statusEl.textContent = tr('editor.saved');
       }
     }
 
