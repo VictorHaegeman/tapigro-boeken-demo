@@ -157,6 +157,86 @@
     );
   }
 
+  // ---- sauvegardes (admin) ----------------------------------------------------------
+
+  function formatSize(bytes) {
+    if (!bytes) return '';
+    const mb = bytes / (1024 * 1024);
+    return mb >= 1 ? `${App.formatNumber(Math.round(mb * 10) / 10)} MB` : `${App.formatNumber(Math.max(1, Math.round(bytes / 1024)))} kB`;
+  }
+
+  function backupCard(label, value, sub, warn) {
+    const el = document.createElement('div');
+    el.className = 'card' + (warn ? ' a-faire' : '');
+    const l = document.createElement('div');
+    l.className = 'l';
+    l.textContent = label;
+    const v = document.createElement('div');
+    v.className = 'v';
+    v.textContent = value;
+    el.append(l, v);
+    if (sub) {
+      const t = document.createElement('div');
+      t.className = 't';
+      t.textContent = sub;
+      el.appendChild(t);
+    }
+    return el;
+  }
+
+  function showBackup(st) {
+    const zone = document.getElementById('home-backup-cards');
+    zone.textContent = '';
+    const last = st.last;
+    const ok = last && last.lastSuccess;
+    if (!last) {
+      zone.appendChild(backupCard(App.t('backup.last'), App.t('backup.never'), '', true));
+    } else {
+      zone.appendChild(
+        backupCard(
+          App.t('backup.last'),
+          ok ? App.relativeDate(last.lastSuccess.at.replace('T', ' ').slice(0, 19)) : App.t('backup.never'),
+          ok ? `${App.formatDate(last.lastSuccess.at.replace('T', ' ').slice(0, 19))} · ${formatSize(last.lastSuccess.size)}` : '',
+          !ok
+        )
+      );
+      zone.appendChild(
+        last.ok
+          ? backupCard(App.t('backup.state'), App.t('backup.ok'), '', false)
+          : backupCard(App.t('backup.state'), App.t('backup.failed'), last.error, true)
+      );
+    }
+    zone.appendChild(backupCard(App.t('backup.kept'), String(st.count), formatSize(st.totalSize), false));
+    document.getElementById('home-backup-info').textContent = App.t('backup.info', { hour: st.hour, keep: st.keep, dir: st.dir });
+    const warn = document.getElementById('home-backup-warn');
+    warn.textContent = App.t('backup.elsewhere');
+    warn.hidden = !st.insideDataDir;
+  }
+
+  async function renderBackup(me) {
+    if (!me || me.user.role !== 'admin') return;
+    const panel = document.getElementById('home-backup');
+    showBackup(await App.api('/api/backup'));
+    panel.hidden = false;
+    const btn = document.getElementById('backup-now');
+    btn.addEventListener('click', async () => {
+      const label = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = App.t('backup.running');
+      try {
+        const st = await App.api('/api/backup', { method: 'POST' });
+        showBackup(st);
+        if (st.last && st.last.ok) App.flash('ok', App.t('backup.done', { file: st.last.file }));
+        else App.flash('erreur', App.t('backup.failedFlash', { error: st.last ? st.last.error : '' }));
+      } catch (err) {
+        App.flashError(err);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+      }
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     if (document.body.dataset.page !== 'home') return;
     App.fetchMe()
@@ -167,6 +247,7 @@
           renderProducts(),
           renderBooks(),
           renderImports(me).catch(() => {}), // 403 si le rôle a changé : panneau masqué
+          renderBackup(me).catch(() => {}),
         ]);
       })
       .catch(App.flashError);

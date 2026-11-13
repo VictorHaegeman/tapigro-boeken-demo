@@ -51,10 +51,18 @@
   const STATE_VERSION = 1;
   const STEP = 1024; // bookService.js : pas initial entre deux positions
   const TEXT_MAX = 4000;
-  const MAX_PAGES_PER_BOOK = 500;
   const MAX_BOOKS = 200;
   const TITLE_SLOT = 'cover_title';
   const DEMO_USER = { id: 1, username: 'Demo', role: 'admin', lang: null };
+
+  // bookService.js tooManyPages : plafond UNIQUE (book-plan.js MAX_PRINTED_PAGES).
+  function tooManyPages(n) {
+    const max = bookPlan.MAX_PRINTED_PAGES;
+    return new HttpError(400, 'QUOTA', `Too many pages: ${n} (max ${max} printed pages per book)`, {
+      key: 'apiErrors.tooManyPages',
+      params: { n, max },
+    });
+  }
 
   // Horodatage au format SQLite datetime('now') : 'YYYY-MM-DD HH:MM:SS' (UTC).
   function sqliteNow(date = new Date()) {
@@ -62,6 +70,18 @@
   }
 
   const clone = (v) => JSON.parse(JSON.stringify(v));
+
+  // Version d'un boek (bookService.js versionOf / stampOf) : updatedAt écrit
+  // à la milliseconde, strictement croissant ; version = cet instant en ms.
+  function versionOf(stamp) {
+    if (typeof stamp !== 'string' || stamp === '') return 0;
+    const ms = Date.parse(`${stamp.replace(' ', 'T')}Z`);
+    return Number.isFinite(ms) ? ms : 0;
+  }
+  function stampOf(ms) {
+    return new Date(ms).toISOString().replace('T', ' ').replace('Z', '');
+  }
+  const conflictError = (message, key) => new HttpError(409, 'BOOK_CONFLICT', message, key);
 
   // ---- état ---------------------------------------------------------------------
 
@@ -93,7 +113,7 @@
   function createBackend({ catalog, storage = null, clock = () => new Date(), seed = true, lang = 'nl', onLang = null }) {
     const t = translator(lang);
     const layouts = catalog.layouts;
-    const layoutById = Object.fromEntries(layouts.map((l) => [l.id, l]));
+    const layoutById = new Map(layouts.map((l) => [l.id, l])); // Map : pas de « constructor »
     const now = () => sqliteNow(clock());
 
     let state = null; // chargé en fin de fonction (une fois tout défini)
@@ -199,8 +219,16 @@
     }
 
     function createProduct(v) {
-      if (rules.isReservedCode(v.code)) {
+      // Même règle que la route (productRules.productCodeProblem).
+      const problem = rules.productCodeProblem(v.code);
+      if (problem === 'format') {
+        throw new HttpError(400, 'VALIDATION', 'code has an invalid format', { key: 'validation.format', params: { field: 'code' } });
+      }
+      if (problem === 'reserved') {
         throw new HttpError(400, 'VALIDATION', rules.RESERVED_CODE_MESSAGE, 'apiErrors.reservedCode');
+      }
+      if (problem === 'windows') {
+        throw new HttpError(400, 'VALIDATION', rules.WINDOWS_CODE_MESSAGE, 'apiErrors.windowsCode');
       }
       const lower = v.code.toLowerCase(); // COLLATE NOCASE (ASCII)
       const exists = state.products.find((p) => p.code.toLowerCase() === lower);
@@ -273,7 +301,7 @@
       return b;
     }
     function layoutOf(b) {
-      const layout = layoutById[b.layoutId];
+      const layout = layoutById.get(b.layoutId);
       if (!layout) throw new HttpError(500, 'INTERNAL', `Unknown layout ${b.layoutId}`);
       return layout;
     }
@@ -288,14 +316,15 @@
       return it;
     }
     const touchBook = (b) => {
-      b.updatedAt = now();
+      b.updatedAt = stampOf(Math.max(clock().getTime(), versionOf(b.updatedAt) + 1));
     };
+    const bookVersion = (id) => versionOf(getBookRow(id).updatedAt);
     const capacityOf = (layout) => layout.grid.columns * layout.grid.rows;
     const pageItems = (pageId) =>
       state.items.filter((it) => it.pageId === pageId).sort((a, b) => a.position - b.position);
     const bookPages = (bookId) =>
       state.pages.filter((p) => p.bookId === bookId).sort((a, b) => a.pageNo - b.pageNo);
-    const hasFixed = (b) => b.hasFixedPages && layoutsLib.hasFixedPages(layoutById[b.layoutId] || {});
+    const hasFixed = (b) => b.hasFixedPages && layoutsLib.hasFixedPages(layoutById.get(b.layoutId) || {});
 
     function itemShape(it) {
       return {
@@ -314,6 +343,7 @@
         layoutId: b.layoutId,
         fixedPages: hasFixed(b),
         texts: clone(b.texts),
+        version: versionOf(b.updatedAt),
         pages: bookPages(id).map((p) => ({
           id: p.id,
           pageNo: p.pageNo,
@@ -336,12 +366,12 @@
           name: b.name,
           layoutId: b.layoutId,
           fixedPages: hasFixed(b),
-          updatedAt: b.updatedAt,
+          updatedAt: String(b.updatedAt).slice(0, 19),
           // Nombre de pages du PDF (bookService.js listBooks).
           pageCount: bookPlan
             .pageSequence(
               { fixedPages: hasFixed(b), pages: bookPages(b.id).map((p) => ({ kind: p.kind, hasItems: pageItems(p.id).length > 0 })) },
-              layoutById[b.layoutId] || {}
+              layoutById.get(b.layoutId) || {}
             )
             .filter((e) => e.printed).length,
           itemCount: state.items.filter((it) => it.bookId === b.id).length,
@@ -364,12 +394,12 @@
     }
 
     function createBook(name, layoutId, { fixedPages = true, fill } = {}) {
-      const layout = layoutById[layoutId];
+      const layout = typeof layoutId === 'string' ? layoutById.get(layoutId) : undefined;
       if (!layout) {
         throw new HttpError(
           400,
           'VALIDATION',
-          `layoutId must be one of: ${Object.keys(layoutById).join(', ')}`,
+          `layoutId must be one of: ${[...layoutById.keys()].join(', ')}`,
           'apiErrors.unknownLayout'
         );
       }
@@ -393,14 +423,11 @@
         if (plan.length === 0) {
           throw new HttpError(400, 'VALIDATION', 'No product matches the selection', 'apiErrors.fillEmpty');
         }
-        if (plan.length > MAX_PAGES_PER_BOOK) {
-          throw new HttpError(400, 'QUOTA', `Too many pages (${MAX_PAGES_PER_BOOK} max per book)`, {
-            key: 'apiErrors.tooManyPages',
-            params: { n: MAX_PAGES_PER_BOOK },
-          });
-        }
       }
       const withFixed = Boolean(fixedPages) && layoutsLib.hasFixedPages(layout);
+      if (plan && bookPlan.exceedsPageLimit(plan.length, withFixed, layout)) {
+        throw tooManyPages(plan.length + bookPlan.fixedPageCount(withFixed, layout));
+      }
       const texts = layoutsLib.layoutSlots(layout).has(TITLE_SLOT) ? { [TITLE_SLOT]: name } : {};
       const t = now();
       const b = {
@@ -427,11 +454,15 @@
       return getBook(b.id);
     }
 
-    // Transcription d'updateBook (bookService.js) : texts remplace, slots
-    // validés ; fixedPages ne touche jamais aux textes ; le titre suit le nom
+    // Transcription d'updateBook (bookService.js) : texts fusionné par slot
+    // (null efface le slot), slots validés ; version attendue → 409 si le boek
+    // a changé ; fixedPages ne touche jamais aux textes ; le titre suit le nom
     // tant qu'il lui est identique et que le PATCH n'envoie pas de titre.
-    function updateBook(id, { name, texts, fixedPages }) {
+    function updateBook(id, { name, texts, fixedPages, expectedVersion }) {
       const b = getBookRow(id);
+      if (expectedVersion !== undefined && expectedVersion !== null && expectedVersion !== versionOf(b.updatedAt)) {
+        throw conflictError('Book was modified in the meantime', 'editor.conflict');
+      }
       const layout = layoutOf(b);
       const slots = layoutsLib.layoutSlots(layout);
       let nextTexts = b.texts;
@@ -447,14 +478,18 @@
               params: { slot },
             });
           }
-          if (typeof value !== 'string' || value.length > TEXT_MAX) {
+          if (value !== null && (typeof value !== 'string' || value.length > TEXT_MAX)) {
             throw new HttpError(400, 'VALIDATION', `texts.${slot} must be a string of at most ${TEXT_MAX} characters`, {
               key: 'apiErrors.textTooLong',
               params: { slot, max: TEXT_MAX },
             });
           }
         }
-        nextTexts = { ...texts };
+        nextTexts = { ...b.texts };
+        for (const [slot, value] of Object.entries(texts)) {
+          if (value === null) delete nextTexts[slot];
+          else nextTexts[slot] = value;
+        }
         textsChanged = true;
       }
       if (fixedPages !== undefined) {
@@ -463,6 +498,10 @@
         }
         if (fixedPages && !layoutsLib.hasFixedPages(layout)) {
           throw new HttpError(400, 'VALIDATION', 'Layout has no fixed pages', 'apiErrors.noFixedPages');
+        }
+        if (fixedPages) {
+          const n = bookPages(id).length;
+          if (bookPlan.exceedsPageLimit(n, true, layout)) throw tooManyPages(n + bookPlan.fixedPageCount(true, layout));
         }
         b.hasFixedPages = fixedPages;
       }
@@ -526,11 +565,10 @@
     function addPage(bookId, { afterPageNo, kind = 'products' } = {}) {
       const b = getBookRow(bookId);
       const pages = bookPages(bookId);
-      if (pages.length >= MAX_PAGES_PER_BOOK) {
-        throw new HttpError(400, 'QUOTA', `Too many pages (${MAX_PAGES_PER_BOOK} max per book)`, {
-          key: 'apiErrors.tooManyPages',
-          params: { n: MAX_PAGES_PER_BOOK },
-        });
+      const layout = layoutOf(b);
+      const withFixed = Boolean(b.hasFixedPages) && layoutsLib.hasFixedPages(layout);
+      if (bookPlan.exceedsPageLimit(pages.length + 1, withFixed, layout)) {
+        throw tooManyPages(pages.length + 1 + bookPlan.fixedPageCount(withFixed, layout));
       }
       const maxNo = pages.reduce((m, p) => Math.max(m, p.pageNo), 0);
       const after = afterPageNo === undefined ? maxNo : Math.min(afterPageNo, maxNo);
@@ -570,7 +608,7 @@
         }
         const idx = items.findIndex((r) => r.id === beforeItemId);
         if (idx === -1) {
-          throw new HttpError(400, 'VALIDATION', 'beforeItemId is not an item of this page');
+          throw conflictError('beforeItemId is not an item of this page (stale view)', 'editor.conflictStale');
         }
         return { prev: idx > 0 ? items[idx - 1].position : 0, next: items[idx].position };
       };
@@ -636,7 +674,7 @@
         return { pageId: pages[next].id, beforeItemId: first === undefined ? null : first, shifted };
       }
       if (!pages[from].itemIds.includes(beforeItemId)) {
-        throw new HttpError(400, 'VALIDATION', 'beforeItemId is not an item of this page');
+        throw conflictError('beforeItemId is not an item of this page (stale view)', 'editor.conflictStale');
       }
       const shifted = makeRoom(bookId, pages, from, capacity, excludeItemId);
       const stays = pages[from].itemIds.includes(beforeItemId);
@@ -733,7 +771,7 @@
     // Boek d'exemple : catalogue stock-6 avec couverture, 14 produits sur
     // 3 pages, puis la double page vide de fin que l'éditeur maintient.
     function seedExampleBook() {
-      const layout = layoutById['stock-6'];
+      const layout = layoutById.get('stock-6');
       if (!layout) return;
       const book = createBook('Stock boek Tapigro', 'stock-6');
       for (let i = 0; i < 4; i++) addPage(book.id, {});
@@ -791,6 +829,16 @@
       minimumStock: { type: 'number', min: 0, max: 1e9 },
       isActive: { type: 'boolean' },
     };
+
+    // Mutation d'un boek (routes/books.js bookMutation) : version après
+    // l'opération et version sur laquelle elle s'applique (404 si inconnu).
+    function mutation(id, fn) {
+      const baseVersion = bookVersion(id);
+      const res = fn();
+      const extra = { baseVersion };
+      if (!(res.body.book && typeof res.body.book.version === 'number')) extra.version = bookVersion(id);
+      return { status: res.status, body: { ...res.body, ...extra } };
+    }
 
     // [méthode, motif, handler(match, body, query) → {status?, body}]
     const ROUTES = [
@@ -850,11 +898,17 @@
       ['PATCH', /^\/api\/books\/([^/]+)$/, (m, b) => {
         const id = idOf(m[1]);
         const v = check(
-          { name: { type: 'string', minLength: 1, maxLength: 200 }, fixedPages: { type: 'boolean' } },
+          {
+            name: { type: 'string', minLength: 1, maxLength: 200 },
+            fixedPages: { type: 'boolean' },
+            version: { type: 'integer', min: 0 },
+          },
           b
         );
         const texts = b && typeof b === 'object' ? b.texts : undefined;
-        return { body: { book: updateBook(id, { name: v.name, texts, fixedPages: v.fixedPages }) } };
+        return mutation(id, () => ({
+          body: { book: updateBook(id, { name: v.name, texts, fixedPages: v.fixedPages, expectedVersion: v.version }) },
+        }));
       }],
       ['POST', /^\/api\/books\/([^/]+)\/duplicate$/, (m) => ({
         status: 201,
@@ -873,11 +927,15 @@
           },
           b
         );
-        return { status: 201, body: { page: addPage(id, v) } };
+        return mutation(id, () => ({ status: 201, body: { page: addPage(id, v) } }));
       }],
       ['DELETE', /^\/api\/books\/([^/]+)\/pages\/([^/]+)$/, (m) => {
-        deletePage(idOf(m[1]), idOf(m[2]));
-        return { body: { ok: true } };
+        const id = idOf(m[1]);
+        const pageId = idOf(m[2]);
+        return mutation(id, () => {
+          deletePage(id, pageId);
+          return { body: { ok: true } };
+        });
       }],
       ['POST', /^\/api\/books\/([^/]+)\/items$/, (m, b) => {
         const id = idOf(m[1]);
@@ -889,7 +947,7 @@
           },
           b
         );
-        return { status: 201, body: insertItemPlaced(id, v) };
+        return mutation(id, () => ({ status: 201, body: insertItemPlaced(id, v) }));
       }],
       ['PATCH', /^\/api\/books\/([^/]+)\/items\/([^/]+)$/, (m, b) => {
         const id = idOf(m[1]);
@@ -901,11 +959,15 @@
           },
           b
         );
-        return { body: moveItemPlaced(id, itemId, v) };
+        return mutation(id, () => ({ body: moveItemPlaced(id, itemId, v) }));
       }],
       ['DELETE', /^\/api\/books\/([^/]+)\/items\/([^/]+)$/, (m) => {
-        deleteItem(idOf(m[1]), idOf(m[2]));
-        return { body: { ok: true } };
+        const id = idOf(m[1]);
+        const itemId = idOf(m[2]);
+        return mutation(id, () => {
+          deleteItem(id, itemId);
+          return { body: { ok: true } };
+        });
       }],
 
       ['GET', /^\/api\/imports$/, (m, b, q) => {
@@ -950,7 +1012,17 @@
         const code = err.code || 'INTERNAL';
         // Message traduit exactement comme le fait errorHandler sur le serveur.
         const message = translateError(err, code, t, hasKey) || err.message;
-        return { status, body: { error: { code, message } } };
+        const out = { error: { code, message } };
+        // 409 BOOK_CONFLICT : l'état courant du boek (après le « ROLLBACK »).
+        if (code === 'BOOK_CONFLICT') {
+          const m = /^\/api\/books\/(\d+)/.exec(pathname);
+          try {
+            out.book = m ? getBook(Number(m[1])) : null;
+          } catch {
+            out.book = null;
+          }
+        }
+        return { status, body: out };
       }
     }
 
@@ -974,6 +1046,7 @@
       createBook,
       updateBook,
       getBook,
+      bookVersion,
       addPage,
       deletePage,
       insertItem,

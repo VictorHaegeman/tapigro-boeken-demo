@@ -83,3 +83,9 @@ details.detail-error > summary {
   margin-top: 12px;
   text-align: center;
 }
+
+/* Produits dont le code ne respecte plus la règle (routes/imports.js). */
+.bandeau-codes { margin: 0 0 16px; padding: 10px 14px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-size: 13px; }
+.bandeau-codes p { margin: 4px 0 6px; }
+.bandeau-codes ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.bandeau-codes a { color: inherit; }

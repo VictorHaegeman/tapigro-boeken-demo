@@ -35,6 +35,8 @@
         <a href="imports.fr.html" class="" title="Imports"><span class="ico">⬆️</span><span class="lbl">Imports</span></a>
         <a href="users.fr.html" class="" title="Utilisateurs"><span class="ico">👤</span><span class="lbl">Utilisateurs</span></a>
         
+        
+        
       </nav>
       <div class="qui">
         <span class="qui-nom">Démo</span>
@@ -44,10 +46,14 @@
         <span class="langues" role="group" aria-label="Langue de l’application">
           <button type="button" class="lien lang-btn" data-lang="nl" lang="nl" aria-pressed="false">NL</button><button type="button" class="lien lang-btn on" data-lang="fr" lang="fr" aria-pressed="true">FR</button>
         </span>
+        
+        
       </div>
     </aside>
     
     <main class="container">
+      
+      
       <div id="flash" aria-live="polite"></div>
       <div class="entete">
   <h1>Bonjour, Démo</h1>
@@ -88,6 +94,15 @@
   <div class="entete"><h2>⬆️ Imports</h2><a href="imports.fr.html">Importer des données →</a></div>
   <div class="cards" id="home-imports-cards"></div>
   <p class="vide" id="home-imports-empty" hidden>Aucun import pour l’instant. Importez votre export Excel Optedo pour remplir le catalogue.</p>
+</div>
+
+
+<div class="panel" id="home-backup" hidden>
+  <div class="entete"><h2>💾 Sauvegarde</h2>
+    <button id="backup-now" type="button" class="btn sec petit">Sauvegarder maintenant</button></div>
+  <div class="cards" id="home-backup-cards"></div>
+  <p class="mut petit" id="home-backup-info"></p>
+  <p class="avertir petit" id="home-backup-warn" hidden></p>
 </div>
 
 <script src="js/home.js" defer></script>

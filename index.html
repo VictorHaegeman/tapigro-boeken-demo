@@ -35,6 +35,8 @@
         <a href="imports.html" class="" title="Importeren"><span class="ico">⬆️</span><span class="lbl">Importeren</span></a>
         <a href="users.html" class="" title="Gebruikers"><span class="ico">👤</span><span class="lbl">Gebruikers</span></a>
         
+        
+        
       </nav>
       <div class="qui">
         <span class="qui-nom">Demo</span>
@@ -44,10 +46,14 @@
         <span class="langues" role="group" aria-label="Taal van de toepassing">
           <button type="button" class="lien lang-btn on" data-lang="nl" lang="nl" aria-pressed="true">NL</button><button type="button" class="lien lang-btn" data-lang="fr" lang="fr" aria-pressed="false">FR</button>
         </span>
+        
+        
       </div>
     </aside>
     
     <main class="container">
+      
+      
       <div id="flash" aria-live="polite"></div>
       <div class="entete">
   <h1>Goedendag, Demo</h1>
@@ -88,6 +94,15 @@
   <div class="entete"><h2>⬆️ Importeren</h2><a href="imports.html">Gegevens importeren →</a></div>
   <div class="cards" id="home-imports-cards"></div>
   <p class="vide" id="home-imports-empty" hidden>Nog geen import. Importeer uw Excel-export van Optedo om de catalogus te vullen.</p>
+</div>
+
+
+<div class="panel" id="home-backup" hidden>
+  <div class="entete"><h2>💾 Back-up</h2>
+    <button id="backup-now" type="button" class="btn sec petit">Nu back-up maken</button></div>
+  <div class="cards" id="home-backup-cards"></div>
+  <p class="mut petit" id="home-backup-info"></p>
+  <p class="avertir petit" id="home-backup-warn" hidden></p>
 </div>
 
 <script src="js/home.js" defer></script>

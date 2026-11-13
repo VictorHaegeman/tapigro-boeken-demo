@@ -4,6 +4,8 @@
  *
  *  - printablePages / pageSequence : quelles pages sont imprimées et avec
  *    quel numéro (celui du PDF) ;
+ *  - MAX_PRINTED_PAGES / printedPageCount / exceedsPageLimit : LE plafond de
+ *    taille d'un boek, en pages imprimées (export PDF et service des boeken) ;
  *  - cascadeChain : où vont les articles quand on dépose dans une page pleine ;
  *  - planFill : remplissage automatique d'un boek ;
  *  - copyNameOf : nom d'une copie, borné.
@@ -17,6 +19,15 @@
   'use strict';
 
   const FIXED_KEYS = ['cover', 'page2', 'back'];
+
+  // Plafond UNIQUE de la taille d'un boek, en PAGES IMPRIMÉES (pages fixes
+  // comprises, double page vide de fin exclue : printedPageCount). L'export
+  // PDF refuse au-delà (413 BOOK_TOO_LARGE) ; la création, la cascade et le
+  // remplissage automatique doivent refuser AVANT d'atteindre ce chiffre.
+  // 500 pages ≈ 4 900 produits en labels-10 ou ≈ 2 900 en stock-6. Mesuré
+  // (3 000 produits, labels-10, 303 p.) : PDF de 51 Mo, ~2 s de rendu hors du
+  // thread principal une fois les variantes d'impression des photos créées.
+  const MAX_PRINTED_PAGES = 500;
 
   function hasItems(page) {
     if (typeof page.hasItems === 'boolean') return page.hasItems;
@@ -63,6 +74,29 @@
     if (fixed.back) push('back', null, true);
     if (n === 0) out.unshift({ type: 'blank', page: null, printed: true, number: ++n });
     return out;
+  }
+
+  /** Nombre de pages fixes imprimées (0 si le boek ne les utilise pas). */
+  function fixedPageCount(useFixedPages, layout) {
+    if (!useFixedPages) return 0;
+    const fixed = (layout && layout.fixedPages) || {};
+    return FIXED_KEYS.filter((k) => fixed[k]).length;
+  }
+
+  /** Nombre de pages du PDF (= numéro de la dernière page de pageSequence). */
+  function printedPageCount(book, layout) {
+    return pageSequence(book, layout).filter((e) => e.printed).length;
+  }
+
+  /**
+   * Un boek de `contentPages` pages de contenu (TOUTES, vides de fin
+   * comprises : majorant des pages imprimées) dépasse-t-il le plafond ?
+   * Règle à appliquer AVANT d'écrire (création, ajout de page, cascade,
+   * remplissage, activation des pages fixes) : tout boek accepté ici a un PDF
+   * accepté par l'export.
+   */
+  function exceedsPageLimit(contentPages, useFixedPages, layout) {
+    return contentPages + fixedPageCount(useFixedPages, layout) > MAX_PRINTED_PAGES;
   }
 
   /** Légende d'une page (éditeur, aperçu) : clé de traduction + paramètres,
@@ -239,8 +273,12 @@
   return {
     FIXED_KEYS,
     NAME_MAX,
+    MAX_PRINTED_PAGES,
     printablePages,
     pageSequence,
+    fixedPageCount,
+    printedPageCount,
+    exceedsPageLimit,
     captionOf,
     bookSpreads,
     cascadeChain,

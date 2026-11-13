@@ -47,16 +47,91 @@ window.App = (() => {
     return Number.isFinite(num) ? new Intl.NumberFormat(locale).format(num) : String(n);
   }
 
+  // ---- session expirée ----------------------------------------------------------
+  // Page de connexion, avec retour à la page actuelle après connexion.
+  function loginUrl() {
+    const here = window.location.pathname + window.location.search;
+    if (/^\/login(\?|$)/.test(here)) return url('/login');
+    return `${url('/login')}?next=${encodeURIComponent(here)}`;
+  }
+
+  // Une page qui garde une saisie non enregistrée (l'éditeur) s'inscrit ici :
+  // handler(err) → true = « je m'en charge » (pas de redirection brutale, la
+  // saisie reste à l'écran) ; false = redirection vers la connexion.
+  let sessionExpiredHandler = null;
+  function onSessionExpired(handler) {
+    sessionExpiredHandler = typeof handler === 'function' ? handler : null;
+  }
+
+  // Brouillons de l'éditeur (public/js/editor : tapigro-editor-draft-<user>-<boek>,
+  // -stash-…) : effacés à la déconnexion et quand une session expirée est
+  // constatée sans saisie à protéger — sur un poste partagé, rien ne reste
+  // pour la personne suivante (revue 1.1.0).
+  const EDITOR_KEY_PREFIX = 'tapigro-editor-';
+  function clearEditorStorage() {
+    try {
+      const s = window.localStorage;
+      if (!s) return;
+      const keys = [];
+      for (let i = 0; i < s.length; i++) {
+        const k = s.key(i);
+        if (typeof k === 'string' && k.startsWith(EDITOR_KEY_PREFIX)) keys.push(k);
+      }
+      for (const k of keys) s.removeItem(k);
+    } catch {
+      /* stockage indisponible */
+    }
+  }
+
+  // 401 / plus de session : erreur 401 (status, code UNAUTHENTICATED), et
+  // redirection vers /login?next=<cette page> sauf si la page s'en charge
+  // (elle garde alors une saisie : ses brouillons ne sont pas effacés).
+  function sessionExpired() {
+    const err = new Error(t('common.sessionExpired'));
+    err.status = 401;
+    err.code = 'UNAUTHENTICATED';
+    me = null;
+    let handled = false;
+    try {
+      handled = Boolean(sessionExpiredHandler && sessionExpiredHandler(err) === true);
+    } catch {
+      handled = false;
+    }
+    err.handled = handled;
+    if (!handled) {
+      clearEditorStorage();
+      window.location.href = loginUrl();
+    }
+    return err;
+  }
+
+  // Adresse de retour après connexion : un chemin de CETTE app seulement
+  // (« /books/3/edit »), jamais « //autre-site » ni « https://… ». Tout
+  // caractère de contrôle est refusé (le navigateur retire tabulations et
+  // retours à la ligne d'une URL : « /\t/evil » deviendrait « //evil ») ;
+  // l'adresse est résolue par le navigateur lui-même et doit rester sur la
+  // même origine (revue 1.1.0) — on n'y va que par son chemin.
+  function safeNext(value) {
+    if (typeof value !== 'string' || !/^\/(?![\/\\])/.test(value)) return null;
+    if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029\\]/.test(value)) return null;
+    let u;
+    try {
+      u = new URL(value, window.location.origin);
+    } catch {
+      return null;
+    }
+    if (u.origin !== window.location.origin) return null;
+    if (u.pathname === '/login') return null;
+    return u.pathname + u.search + u.hash;
+  }
+
   // api('/api/x', {method, body}) → JSON ; ajoute X-CSRF-Token sur les mutations,
-  // redirige vers /login si la session a expiré, jette Error(message) sinon.
+  // session expirée → sessionExpired() ; jette Error(message) sinon.
   async function api(path, { method = 'GET', body } = {}) {
     const headers = { Accept: 'application/json' };
     if (method !== 'GET' && method !== 'HEAD') {
       const session = await fetchMe();
-      if (!session && path !== '/api/login') {
-        window.location.href = url('/login');
-        throw new Error(t('common.sessionExpired'));
-      }
+      if (!session && path !== '/api/login') throw sessionExpired();
       if (session) headers['X-CSRF-Token'] = session.csrfToken;
     }
     if (body !== undefined) headers['Content-Type'] = 'application/json';
@@ -65,10 +140,7 @@ window.App = (() => {
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
-    if (res.status === 401 && path !== '/api/login') {
-      window.location.href = url('/login');
-      throw new Error(t('common.sessionExpired'));
-    }
+    if (res.status === 401 && path !== '/api/login') throw sessionExpired();
     let data = null;
     try {
       data = await res.json();
@@ -88,19 +160,13 @@ window.App = (() => {
   // Upload multipart (imports, photo produit) : même session/CSRF que api().
   async function apiUpload(path, formData) {
     const session = await fetchMe();
-    if (!session) {
-      window.location.href = url('/login');
-      throw new Error(t('common.sessionExpired'));
-    }
+    if (!session) throw sessionExpired();
     const res = await fetch(path, {
       method: 'POST',
       headers: { Accept: 'application/json', 'X-CSRF-Token': session.csrfToken },
       body: formData,
     });
-    if (res.status === 401) {
-      window.location.href = url('/login');
-      throw new Error(t('common.sessionExpired'));
-    }
+    if (res.status === 401) throw sessionExpired();
     let data = null;
     try {
       data = await res.json();
@@ -304,7 +370,10 @@ window.App = (() => {
     btn.addEventListener('click', async () => {
       try {
         await api('/api/logout', { method: 'POST' });
+      } catch {
+        /* déjà déconnecté */
       } finally {
+        clearEditorStorage();
         window.location.href = url('/login');
       }
     });
@@ -326,7 +395,8 @@ window.App = (() => {
             password: form.password.value,
           },
         });
-        window.location.href = '/';
+        // Retour à la page demandée avant la connexion (?next=…), sinon l'accueil.
+        window.location.href = safeNext(new URLSearchParams(window.location.search).get('next')) || url('/');
       } catch (err) {
         showError(errEl, err);
       }
@@ -400,7 +470,7 @@ window.App = (() => {
       tr.querySelector('.u-password').addEventListener('click', async () => {
         const pw = await promptText({
           titre: t('users.passwordTitle', { name: user.username }),
-          label: t('users.passwordLabel'),
+          label: t('admin.passwordNewLabel'),
           type: 'password',
           oui: t('users.passwordSubmit'),
         });
@@ -486,51 +556,105 @@ window.App = (() => {
     });
   }
 
-  // Liens « PDF » (a[data-pdf]) : téléchargement avec un état visible
-  // (« PDF wordt gemaakt… », lien désactivé) au lieu d'un clic sans retour —
-  // un gros boek prend plusieurs secondes. Les erreurs du serveur (déjà un PDF
-  // en cours…) s'affichent en clair. Hors serveur (démo statique : le lien
-  // mène à une page), le lien est suivi normalement.
-  function fileNameOf(res) {
-    const cd = res.headers.get('Content-Disposition') || '';
-    const m = /filename="([^"]+)"/.exec(cd);
-    return m ? m[1] : 'boek.pdf';
+  // Liens « PDF » (a[data-pdf]) : téléchargement par un GET ordinaire (le
+  // navigateur écrit le fichier au fil de l'eau : jamais tout le PDF en
+  // mémoire dans un Blob), dans un cadre caché, avec un état visible
+  // (« PDF wordt gemaakt… », lien désactivé) — un gros boek prend plusieurs
+  // secondes. Le serveur pose le cookie `tapigro_pdf_dl` (routes/pdf.js) :
+  // « <jeton> » = le PDF arrive ; « <jeton>-<CODE> » = refusé (429 : déjà un
+  // PDF en cours ; 413/400 : trop de pages…). Hors serveur (démo statique : le
+  // lien mène à une page), le lien est suivi normalement.
+  const PDF_COOKIE = 'tapigro_pdf_dl';
+  const PDF_TIMEOUT_MS = 10 * 60 * 1000;
+
+  function readCookie(name) {
+    for (const part of document.cookie.split(';')) {
+      const eq = part.indexOf('=');
+      if (eq !== -1 && part.slice(0, eq).trim() === name) return decodeURIComponent(part.slice(eq + 1).trim());
+    }
+    return null;
   }
 
-  async function downloadPdf(link) {
+  function clearPdfCookie() {
+    document.cookie = `${PDF_COOKIE}=; Max-Age=0; Path=/; SameSite=Strict`;
+  }
+
+  function newToken() {
+    const bytes = new Uint8Array(12);
+    window.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  // Message d'un refus du serveur : corps JSON du cadre si lisible, sinon
+  // message de la langue de l'interface pour ce code.
+  function pdfErrorMessage(code, frame) {
+    if (code === 'RATE_LIMITED') return t('common.pdfWait');
+    try {
+      const data = JSON.parse(frame.contentDocument.body.textContent);
+      if (data && data.error && data.error.message) return data.error.message;
+    } catch {
+      /* pas de JSON lisible */
+    }
+    if (code === 'BOOK_TOO_LARGE' || code === 'QUOTA') return t(`apiErrors.${code}`);
+    return t('common.pdfFailed');
+  }
+
+  function downloadPdf(link) {
     if (link.getAttribute('aria-disabled') === 'true') return;
     const label = link.textContent;
     link.setAttribute('aria-disabled', 'true');
     link.classList.add('is-busy');
     link.textContent = t('common.pdfBusy');
-    try {
-      const res = await fetch(link.getAttribute('href'), { headers: { Accept: 'application/pdf' } });
-      if (!res.ok) {
-        let message = t('common.httpError', { status: res.status });
-        try {
-          const data = await res.json();
-          if (data && data.error) message = data.error.message;
-        } catch {
-          /* pas de JSON */
-        }
-        throw new Error(message);
-      }
-      const blob = await res.blob();
-      const href = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = href;
-      a.download = fileNameOf(res);
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(href), 10000);
-    } catch (err) {
-      flashError(err);
-    } finally {
+    const token = newToken();
+    clearPdfCookie();
+    const frame = document.createElement('iframe');
+    frame.hidden = true;
+    frame.setAttribute('aria-hidden', 'true');
+    frame.tabIndex = -1;
+    let timer = null;
+    let finished = false;
+    const finish = (message) => {
+      if (finished) return;
+      finished = true;
+      clearInterval(timer);
+      clearPdfCookie();
       link.textContent = label;
       link.removeAttribute('aria-disabled');
       link.classList.remove('is-busy');
-    }
+      // Le cadre reste le temps que le navigateur termine le téléchargement.
+      setTimeout(() => frame.remove(), 60 * 1000);
+      if (message) flash('erreur', message);
+    };
+    const started = Date.now();
+    timer = setInterval(() => {
+      const value = readCookie(PDF_COOKIE);
+      if (value === token) return finish(null); // le PDF arrive
+      if (value && value.startsWith(`${token}-`)) return finish(pdfErrorMessage(value.slice(token.length + 1), frame));
+      if (Date.now() - started > PDF_TIMEOUT_MS) finish(t('common.pdfFailed'));
+      return undefined;
+    }, 250);
+    // Le cadre ne se « charge » que si le serveur répond par une page (une
+    // erreur) : un téléchargement ne déclenche pas load.
+    frame.addEventListener('load', () => {
+      setTimeout(async () => {
+        if (finished) return;
+        const value = readCookie(PDF_COOKIE);
+        if (value && value.startsWith(token)) return; // l'intervalle s'en charge
+        // Refus sans cookie : session expirée (401) ou autre erreur.
+        const alive = await fetch('/api/me', { headers: { Accept: 'application/json' } })
+          .then((r) => r.ok)
+          .catch(() => true); // réseau : on ne conclut pas à une session expirée
+        if (!alive) {
+          finish(null);
+          sessionExpired();
+          return;
+        }
+        finish(pdfErrorMessage(null, frame));
+      }, 300);
+    });
+    const href = link.getAttribute('href');
+    frame.src = `${href}${href.includes('?') ? '&' : '?'}dl=${token}`;
+    document.body.appendChild(frame);
   }
 
   function initPdfLinks() {
@@ -553,6 +677,10 @@ window.App = (() => {
 
   return {
     url,
+    loginUrl,
+    onSessionExpired,
+    clearEditorStorage,
+    safeNext,
     api,
     apiUpload,
     fetchMe,

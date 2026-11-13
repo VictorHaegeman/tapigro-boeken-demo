@@ -205,10 +205,21 @@ module.exports = { validate };
 //    ces codes sont refusés partout (création manuelle et import Excel).
 // 2. Textes : aucun caractère de contrôle [\x00-\x1f] (ni DEL) dans les champs
 //    libres — rejetés par l'API, nettoyés à l'import.
+// 3. Format du code : productCodeProblem() est LA règle appliquée à la
+//    création manuelle (API), à l'import Excel / `npm run charger` (parseur ET
+//    importProducts, défense en profondeur) et au futur connecteur Optedo.
+//    Le code devient un nom de fichier (`data/images/<CODE>.png`) : un code
+//    `../../X` écrirait hors de data/images (audit 13/11, sécurité M2).
+// 4. Noms réservés de Windows : `CON.png`, `NUL.jpg`, `COM1.png`… ne sont pas
+//    des fichiers ordinaires sous Windows (périphériques) — même avec une
+//    extension. Ces codes sont refusés (problème 'windows'), comme un point
+//    ou une espace final (Windows les retire du nom de fichier).
 
 // Alphabet strict du code (ARCHITECTURE §8, même règle que l'import d'images).
 const CODE_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,63}$/;
 const RESERVED_SUFFIX_RE = /-bar$/i;
+// CON, PRN, AUX, NUL, COM1–9, LPT1–9 — seuls ou suivis d'une extension.
+const WINDOWS_RESERVED_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 const CONTROL_CHARS_RE = /[\x00-\x1f\x7f]/;
 const CONTROL_CHARS_GLOBAL_RE = /[\x00-\x1f\x7f]+/g;
 // Pour validate({ pattern }) : chaîne sans caractère de contrôle.
@@ -216,10 +227,50 @@ const NO_CONTROL_RE = /^[^\x00-\x1f\x7f]*$/;
 
 const RESERVED_CODE_MESSAGE =
   'Un code produit ne peut pas finir par « -BAR » : ce suffixe est réservé aux fichiers de code-barres';
+const WINDOWS_CODE_MESSAGE =
+  'code produit refusé : CON, PRN, AUX, NUL, COM1–COM9 et LPT1–LPT9 sont des noms réservés de Windows (fichiers image impossibles)';
+const INVALID_CODE_MESSAGE =
+  'code produit invalide : 1 à 64 caractères, lettres, chiffres et « - » seulement (ni espace, ni « / », « \\ », « .. »)';
 
 // true si le code entrerait en collision avec un fichier code-barres.
 function isReservedCode(code) {
   return RESERVED_SUFFIX_RE.test(String(code ?? ''));
+}
+
+// true si `CODE.png` serait un nom de périphérique sous Windows.
+function isWindowsReservedName(code) {
+  return WINDOWS_RESERVED_RE.test(String(code ?? ''));
+}
+
+/**
+ * Le code produit est-il acceptable ? → null, 'format', 'reserved' ou 'windows'.
+ * format : pas une chaîne, vide, > 64 caractères, autre chose que
+ * [A-Za-z0-9-] (donc ni `/`, ni `\`, ni `.` / `..`, ni espace, ni caractère
+ * de contrôle), ou un `-` en tête ; reserved : finit par `-bar` (il écrirait
+ * dans le fichier code-barres du produit voisin).
+ */
+function productCodeProblem(code) {
+  if (typeof code !== 'string') return 'format';
+  if (code.includes('/') || code.includes('\\') || code.includes('..')) return 'format';
+  if (/[. ]$/.test(code)) return 'format'; // Windows retire point / espace final
+  if (!CODE_RE.test(code)) return 'format';
+  if (isWindowsReservedName(code)) return 'windows';
+  if (isReservedCode(code)) return 'reserved';
+  return null;
+}
+
+// Entrée de journal d'import (errors_json) pour un code refusé : message
+// technique + clé traduite ; le code affiché est borné et nettoyé.
+function codeError(code, problem) {
+  const raw = cleanText(code);
+  const shown = raw.length > 80 ? `${raw.slice(0, 80)}…` : raw;
+  if (problem === 'reserved') {
+    return { message: `Code ${shown} refusé — ${RESERVED_CODE_MESSAGE}`, key: 'importMsg.reservedCode', params: { code: shown } };
+  }
+  if (problem === 'windows') {
+    return { message: `Code ${shown} refusé — ${WINDOWS_CODE_MESSAGE}`, key: 'importMsg.windowsCode', params: { code: shown } };
+  }
+  return { message: `Code « ${shown} » refusé — ${INVALID_CODE_MESSAGE}`, key: 'errors.invalidCode', params: { code: shown } };
 }
 
 function hasControlChars(value) {
@@ -236,6 +287,11 @@ module.exports = {
   CODE_RE,
   NO_CONTROL_RE,
   RESERVED_CODE_MESSAGE,
+  INVALID_CODE_MESSAGE,
+  WINDOWS_CODE_MESSAGE,
+  productCodeProblem,
+  isWindowsReservedName,
+  codeError,
   isReservedCode,
   hasControlChars,
   cleanText,
@@ -365,7 +421,8 @@ module.exports = { loadLayouts, loadLayout, resolveFixedPages, layoutSlots, hasF
   function lookup(dict, key) {
     let node = dict;
     for (const part of String(key).split('.')) {
-      if (node === null || typeof node !== 'object' || !(part in node)) return undefined;
+      // hasOwnProperty : « constructor », « toString »… ne sont pas des clés.
+      if (node === null || typeof node !== 'object' || !Object.prototype.hasOwnProperty.call(node, part)) return undefined;
       node = node[part];
     }
     return node;
@@ -422,6 +479,8 @@ module.exports = { loadLayouts, loadLayout, resolveFixedPages, layoutSlots, hasF
  *
  *  - printablePages / pageSequence : quelles pages sont imprimées et avec
  *    quel numéro (celui du PDF) ;
+ *  - MAX_PRINTED_PAGES / printedPageCount / exceedsPageLimit : LE plafond de
+ *    taille d'un boek, en pages imprimées (export PDF et service des boeken) ;
  *  - cascadeChain : où vont les articles quand on dépose dans une page pleine ;
  *  - planFill : remplissage automatique d'un boek ;
  *  - copyNameOf : nom d'une copie, borné.
@@ -435,6 +494,15 @@ module.exports = { loadLayouts, loadLayout, resolveFixedPages, layoutSlots, hasF
   'use strict';
 
   const FIXED_KEYS = ['cover', 'page2', 'back'];
+
+  // Plafond UNIQUE de la taille d'un boek, en PAGES IMPRIMÉES (pages fixes
+  // comprises, double page vide de fin exclue : printedPageCount). L'export
+  // PDF refuse au-delà (413 BOOK_TOO_LARGE) ; la création, la cascade et le
+  // remplissage automatique doivent refuser AVANT d'atteindre ce chiffre.
+  // 500 pages ≈ 4 900 produits en labels-10 ou ≈ 2 900 en stock-6. Mesuré
+  // (3 000 produits, labels-10, 303 p.) : PDF de 51 Mo, ~2 s de rendu hors du
+  // thread principal une fois les variantes d'impression des photos créées.
+  const MAX_PRINTED_PAGES = 500;
 
   function hasItems(page) {
     if (typeof page.hasItems === 'boolean') return page.hasItems;
@@ -481,6 +549,29 @@ module.exports = { loadLayouts, loadLayout, resolveFixedPages, layoutSlots, hasF
     if (fixed.back) push('back', null, true);
     if (n === 0) out.unshift({ type: 'blank', page: null, printed: true, number: ++n });
     return out;
+  }
+
+  /** Nombre de pages fixes imprimées (0 si le boek ne les utilise pas). */
+  function fixedPageCount(useFixedPages, layout) {
+    if (!useFixedPages) return 0;
+    const fixed = (layout && layout.fixedPages) || {};
+    return FIXED_KEYS.filter((k) => fixed[k]).length;
+  }
+
+  /** Nombre de pages du PDF (= numéro de la dernière page de pageSequence). */
+  function printedPageCount(book, layout) {
+    return pageSequence(book, layout).filter((e) => e.printed).length;
+  }
+
+  /**
+   * Un boek de `contentPages` pages de contenu (TOUTES, vides de fin
+   * comprises : majorant des pages imprimées) dépasse-t-il le plafond ?
+   * Règle à appliquer AVANT d'écrire (création, ajout de page, cascade,
+   * remplissage, activation des pages fixes) : tout boek accepté ici a un PDF
+   * accepté par l'export.
+   */
+  function exceedsPageLimit(contentPages, useFixedPages, layout) {
+    return contentPages + fixedPageCount(useFixedPages, layout) > MAX_PRINTED_PAGES;
   }
 
   /** Légende d'une page (éditeur, aperçu) : clé de traduction + paramètres,
@@ -657,8 +748,12 @@ module.exports = { loadLayouts, loadLayout, resolveFixedPages, layoutSlots, hasF
   return {
     FIXED_KEYS,
     NAME_MAX,
+    MAX_PRINTED_PAGES,
     printablePages,
     pageSequence,
+    fixedPageCount,
+    printedPageCount,
+    exceedsPageLimit,
     captionOf,
     bookSpreads,
     cascadeChain,
@@ -676,9 +771,11 @@ module.exports = { loadLayouts, loadLayout, resolveFixedPages, layoutSlots, hasF
 "server/services/pdf/document.js": function (module, exports, require) {
 'use strict';
 // Composition d'un boek en pages pdfkit — partie PURE du rendu PDF, sans BDD
-// ni système de fichiers propres : renderer.js (serveur) l'alimente depuis
-// SQLite, la version démo statique (demo/, scripts/build-demo.js) depuis le
-// navigateur. Un seul code d'ordonnancement → un seul résultat.
+// ni système de fichiers propres : le serveur l'exécute dans un worker_thread
+// (worker.js, données lues par renderer.js loadBookData), la version démo
+// statique (demo/, scripts/build-demo.js) dans le navigateur. Un seul code
+// d'ordonnancement → un seul résultat. Doit rester utilisable dans le
+// navigateur : aucun require hors node:fs / node:path et ce dossier.
 //
 // Ordre : cover → page2 → pages de contenu (page_no croissant, `blank` rendues
 // vides) → dos ; pages fixes seulement si le boek les utilise.
@@ -701,8 +798,9 @@ const { pageSequence, printablePages } = require('../../../public/js/book-plan')
  * @param {boolean} book.withFixedPages le boek utilise-t-il ses pages fixes ?
  * @param {Array<{kind: string, hasItems: boolean, items: () => Array}>} book.pages
  *   TOUTES les pages de contenu (ordre page_no) ; `items()` n'est appelé que
- *   pour les pages imprimées, page par page (mémoire plate pour les gros boeken)
- * @param {object} ctx { rootDir, imagesDir, texts, warn }
+ *   pour les pages imprimées
+ * @param {object} ctx { rootDir, imagesDir, texts, warn, imagePath? }
+ *   (drawFixedPage.js drawElement)
  * @returns {number} nombre de pages produites
  */
 function drawBook(doc, { layout, withFixedPages, pages }, ctx) {
@@ -862,6 +960,8 @@ function fieldText(product, field) {
  *   texts     : books.texts_json parsé (pages fixes),
  *   rootDir   : racine du repo (assets statiques),
  *   imagesDir : data/images,
+ *   imagePath(field, fileName) : facultatif, chemin du fichier à incorporer
+ *     pour une photo / un code-barres (défaut : imagesDir/fileName),
  *   warn(msg) : collecte d'avertissements (jamais d'exception de rendu)
  * }
  */
@@ -973,7 +1073,9 @@ function drawImage(doc, el, x, y, ctx) {
     file = path.join(ctx.rootDir, 'public', 'assets', path.basename(el.asset));
   } else if (el.field === 'photo' || el.field === 'barcode') {
     const name = ctx.product ? ctx.product[`${el.field}_file`] : null;
-    if (name) file = path.join(ctx.imagesDir, name);
+    // ctx.imagePath (serveur) : photo → variante d'impression (data/print/),
+    // code-barres → original ; sans (démo) : data/images/<nom>.
+    if (name) file = ctx.imagePath ? ctx.imagePath(el.field, name) : path.join(ctx.imagesDir, name);
   }
 
   let drawn = false;
@@ -983,8 +1085,9 @@ function drawImage(doc, el, x, y, ctx) {
     } else {
       try {
         // fit : l'image est PLACÉE à l'échelle dans la boîte, pdfkit incorpore
-        // les octets d'origine (PNG/JPEG) sans recompression ni resampling —
-        // résolution native préservée (codes-barres lisibles au scanner).
+        // les octets du fichier (PNG/JPEG) sans recompression ni resampling :
+        // codes-barres à leur résolution native (lisibles au scanner) ; les
+        // photos arrivent déjà réduites à ~300 ppi (variante d'impression).
         doc.image(file, x, y, { fit: [w, h], align: 'center', valign: 'center' });
         drawn = true;
       } catch (err) {

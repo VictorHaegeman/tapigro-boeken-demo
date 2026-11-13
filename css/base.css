@@ -554,3 +554,20 @@ td.acties > .btn, td.acties > .menu-plus { margin: 2px 6px 2px 0; vertical-align
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
+
+/* Avertissement discret (ex. sauvegardes sur le même disque que les données). */
+.avertir { color: var(--warn); font-weight: 600; }
+
+/* Version de l'application en bas du menu (admins seulement). */
+.qui .versie { display: block; margin-top: 6px; font-size: 10.5px; color: var(--muted); }
+@media (min-width: 761px) {
+  body[data-page="editor"] .qui .versie { display: none; }
+}
+
+/* Page « Logboek » (journal d'audit, admins). */
+.toolbar .periode { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.table td.audit-details { font-size: 12.5px; color: var(--muted); max-width: 420px; overflow-wrap: anywhere; }
+.audit-pager { display: flex; gap: 8px; justify-content: flex-end; margin: 12px 0; }
+
+/* Bandeau « connexion non sécurisée (http) » (admins, server/start.js). */
+.bandeau-http { margin: 0 0 12px; padding: 6px 12px; border-radius: 8px; font-size: 12.5px; background: var(--warn-bg); color: var(--warn); }

@@ -8,6 +8,17 @@
  * position de défilement restaurée). Nom + textes des pages fixes passent par l'autosave débouncée
  * et le bouton Enregistrer (public/js/editor/autosave.js).
  *
+ * Enregistrement et concurrence (audit 13/11, B1 / I5) : toutes les requêtes
+ * de l'éditeur passent par UNE file (une à la fois) et par EditorAutosave
+ * (jamais de faux « Opgeslagen », nouveaux essais, brouillon local, session
+ * expirée sans redirection). Le boek a une version : le PATCH du nom/des
+ * textes l'envoie (409 BOOK_CONFLICT si le boek a changé ailleurs) ; chaque
+ * réponse de mutation dit sur quelle version elle s'est appliquée — si ce
+ * n'est pas celle que l'éditeur connaît, quelqu'un d'autre a modifié le boek
+ * et la vue est rechargée. Un conflit sur un champ que l'utilisateur est en
+ * train de modifier affiche un bandeau [Herladen] ; sa saisie est mise de
+ * côté et peut être réappliquée.
+ *
  * Le boek est affiché en DOUBLE PAGE : couverture + page 2 (si le boek a ses
  * pages fixes — book.fixedPages, réglable dans la barre d'outils), puis les
  * pages de contenu par paires, puis le dos. Une double page vide est toujours
@@ -43,7 +54,51 @@
     const liveEl = document.getElementById('editor-live');
     const panelEl = document.getElementById('product-panel');
     const panelToggle = document.getElementById('panel-toggle');
-    const saver = EditorAutosave.createSaver(document.getElementById('save-status'));
+    const statusEl = document.getElementById('save-status');
+    const bannerEl = document.getElementById('editor-banner');
+
+    // Version du boek connue de l'éditeur et dernières valeurs du nom et des
+    // textes confirmées par le serveur (base des champs modifiés).
+    let knownVersion = null;
+    let serverDoc = { name: '', texts: {} };
+    let stash = null; // saisie mise de côté après un conflit : [[champ, {value, base}]]
+    let stashReason = 'conflict'; // 'conflict' | 'draft' (brouillon d'une visite précédente)
+    let linkedName = ''; // dernier nom non vide (title-follow.js)
+    let bannerKey = null; // contenu affiché du bandeau (showBanner)
+
+    const AS = EditorAutosave;
+    // window.fetch relu à chaque appel : la démo statique le remplace.
+    const api = AS.createApi({ fetchImpl: (input, init) => window.fetch(input, init) });
+    const queue = AS.createQueue();
+    // Brouillons propres à l'UTILISATEUR connecté (revue 1.1.0) : celui d'un
+    // autre compte sur le même poste n'est jamais relu ; effacés à la
+    // déconnexion (common.js clearEditorStorage). Clé connue après /api/me.
+    let userId = null;
+    const userKey = (kind) => () => (userId ? `tapigro-editor-${kind}-${userId}-${bookId}` : null);
+    const draftStore = AS.createDraftStore(userKey('draft'));
+    const stashStore = AS.createDraftStore(userKey('stash'));
+    const saver = AS.createSaver({
+      send: sendDoc,
+      onSaved: (result) => {
+        if (reconcile(result.book).changed) renderSpreads();
+      },
+      onConflict: handleDocConflict,
+      resync: () => resync(),
+      onChange: (info) => renderUi(info),
+      draft: draftStore,
+    });
+
+    // Session expirée pendant un appel App.api (panneau produits, chargement…) :
+    // si une saisie n'est pas enregistrée, PAS de redirection brutale vers
+    // /login — l'autosave le signale (« Sessie verlopen », reconnexion dans un
+    // nouvel onglet, « Opnieuw proberen ») et la saisie reste à l'écran.
+    // Sinon (rien en mémoire ni mis de côté) : /login?next=<cet éditeur>, et
+    // common.js efface les brouillons de l'éditeur (poste partagé).
+    App.onSessionExpired((err) => {
+      if (!saver.hasUnsaved() && !stash) return false;
+      saver.structureFailed(err);
+      return true;
+    });
 
     let book = null;
     let layout = null;
@@ -58,12 +113,210 @@
     let sequence = new Map(); // pageId → élément de pageSequence (numéro du PDF)
     let pendingMarks = null; // {ids, className} : cellules à signaler au prochain rendu
 
+    let errorTimer = null;
     function showError(err) {
+      if (err && err.handled) return; // session expirée : le bandeau de l'autosave le dit
       errorEl.textContent = err.message;
       errorEl.hidden = false;
-      setTimeout(() => {
+      clearTimeout(errorTimer);
+      errorTimer = setTimeout(() => {
         errorEl.hidden = true;
-      }, 4000);
+      }, 6000);
+    }
+
+    // ---- nom et textes : champs, version, conflits ----------------------------------
+    // Champs suivis par l'autosave : 'name' et 'text:<slot>'. Valeur d'un
+    // slot non enregistré : null (le layout affiche alors son texte par défaut).
+
+    const TEXT = 'text:';
+    const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+
+    function fieldValue(doc, field) {
+      if (field === 'name') return doc.name;
+      const slot = field.slice(TEXT.length);
+      return hasOwn(doc.texts, slot) ? doc.texts[slot] : null;
+    }
+
+    function setField(doc, field, value) {
+      if (field === 'name') doc.name = value;
+      else if (value === null) delete doc.texts[field.slice(TEXT.length)];
+      else doc.texts[field.slice(TEXT.length)] = value;
+    }
+
+    function sameTexts(a, b) {
+      const ka = Object.keys(a);
+      return ka.length === Object.keys(b).length && ka.every((k) => hasOwn(b, k) && a[k] === b[k]);
+    }
+
+    // Slots de texte du layout (un brouillon ne réapplique que ceux-là).
+    function layoutSlots() {
+      const slots = new Set();
+      for (const page of Object.values(layout.fixedPages || {})) {
+        for (const el of page.elements || []) if (el.type === 'textSlot') slots.add(el.slot);
+      }
+      return slots;
+    }
+
+    function knownField(field) {
+      return field === 'name' || (typeof field === 'string' && field.startsWith(TEXT) && layoutSlots().has(field.slice(TEXT.length)));
+    }
+
+    // L'utilisateur a modifié un champ : à enregistrer (base = valeur serveur).
+    function markField(field, value) {
+      saver.set(field, value, fieldValue(serverDoc, field));
+    }
+
+    // Avance la version connue DANS la tâche de la file, avant que la tâche
+    // suivante (un PATCH du nom en attente derrière un dépôt…) ne lise
+    // knownVersion — sinon elle partirait avec l'ancienne version : 409 à
+    // soi-même (revue 1.1.0). Seulement si la requête s'est appliquée sur la
+    // version connue : sinon quelqu'un d'autre a modifié le boek, la
+    // resynchronisation s'en charge et une requête déjà en file part avec
+    // l'ancienne version (409 traité, jamais d'écrasement).
+    function advanceVersion(res) {
+      if (!res || typeof res.baseVersion !== 'number' || res.baseVersion !== knownVersion) return;
+      const v = res.book && typeof res.book.version === 'number' ? res.book.version : res.version;
+      if (typeof v === 'number') knownVersion = v;
+    }
+
+    // PATCH partiel : seulement les champs modifiés, avec la version connue
+    // (lue au moment de l'envoi, dans la file).
+    function sendDoc(fields) {
+      return queue.run(async () => {
+        const body = { version: knownVersion };
+        for (const [field, value] of Object.entries(fields)) {
+          if (field === 'name') body.name = value;
+          else (body.texts || (body.texts = {}))[field.slice(TEXT.length)] = value;
+        }
+        const res = await api.call(`/api/books/${bookId}`, { method: 'PATCH', body });
+        advanceVersion(res);
+        return res;
+      });
+    }
+
+    // Recale l'éditeur sur un état complet du serveur (GET, réponse d'un
+    // PATCH, 409) SANS perdre la saisie en attente : vue = serveur + champs
+    // en attente. → {conflicts: champs modifiés ici ET ailleurs, changed: la
+    // vue a changé (re-rendu nécessaire)}.
+    function reconcile(srv) {
+      knownVersion = srv.version;
+      serverDoc = { name: srv.name, texts: { ...srv.texts } };
+      const conflicts = [];
+      for (const [field, c] of saver.entries()) {
+        const sv = fieldValue(serverDoc, field);
+        if (sv === c.value) saver.discard(field); // déjà enregistré (même valeur)
+        else if (sv !== c.base) conflicts.push(field); // modifié ailleurs aussi
+      }
+      const view = { name: srv.name, texts: { ...srv.texts } };
+      for (const [field, c] of saver.entries()) setField(view, field, c.value);
+      let changed = false;
+      if (!sameTexts(view.texts, book.texts)) {
+        book.texts = view.texts; // nouvel objet : pages fixes re-rendues
+        changed = true;
+      }
+      if (!saver.has('name') && srv.name !== book.name.trim()) {
+        book.name = srv.name;
+        nameEl.value = srv.name;
+        linkedName = srv.name;
+      }
+      if (srv.fixedPages !== book.fixedPages) {
+        book.fixedPages = srv.fixedPages;
+        fixedToggle.checked = Boolean(srv.fixedPages);
+        changed = true;
+      }
+      if (Array.isArray(srv.pages) && JSON.stringify(srv.pages) !== JSON.stringify(book.pages)) {
+        book.pages = srv.pages;
+        changed = true;
+      }
+      return { conflicts, changed };
+    }
+
+    // Recharge l'état du serveur (dans la file). Un conflit sur un champ en
+    // cours de saisie met l'autosave en pause (bandeau).
+    async function resync() {
+      const srv = await queue.run(() => api.call(`/api/books/${bookId}`));
+      const { conflicts, changed } = reconcile(srv);
+      if (changed) renderSpreads();
+      if (conflicts.length) saver.markConflict();
+      return { conflicts, changed };
+    }
+
+    // 409 sur le PATCH du nom / des textes. Si les champs envoyés n'ont pas
+    // été touchés ailleurs (autre champ, ou structure), on se recale et on
+    // renvoie sans rien demander ; sinon : bandeau, saisie gardée.
+    function handleDocConflict(err) {
+      if (!err.book) {
+        resync()
+          .then(({ conflicts }) => {
+            if (!conflicts.length) saver.resume();
+          })
+          .catch(() => {}); // boek supprimé… : le bandeau reste
+        return;
+      }
+      const { conflicts, changed } = reconcile(err.book);
+      if (changed) renderSpreads();
+      if (!conflicts.length) {
+        announce(App.t('editor.changedElsewhere'));
+        saver.resume();
+      }
+    }
+
+    // Mutation de structure : dans la file, comptée par l'indicateur. La
+    // réponse fait avancer la version connue ; si elle s'est appliquée sur
+    // une autre version que celle de l'éditeur, quelqu'un a modifié le boek
+    // entre-temps → la vue est rechargée.
+    async function mutate(path, options) {
+      let foreign = false;
+      const res = await saver.track(
+        queue.run(async () => {
+          const r = await api.call(path, options);
+          foreign = Boolean(r && typeof r.baseVersion === 'number' && r.baseVersion !== knownVersion);
+          advanceVersion(r); // avant la tâche suivante de la file
+          return r;
+        })
+      );
+      if (res && res.book && typeof res.book.version === 'number') {
+        // Réponse = boek complet (PATCH) : la vue s'y recale directement.
+        const { conflicts } = reconcile(res.book);
+        if (conflicts.length) saver.markConflict();
+        return res;
+      }
+      if (foreign) {
+        // Version connue NON avancée : la resynchronisation la recale.
+        // Après la mise à jour locale faite par l'appelant (le GET passe
+        // après, dans la file).
+        Promise.resolve()
+          .then(() => resync())
+          .then(({ changed }) => {
+            if (changed) announce(App.t('editor.changedElsewhere'));
+          })
+          .catch((e) => saver.structureFailed(e));
+      }
+      return res;
+    }
+
+    // Échec d'une mutation de structure : on le dit, puis on recharge l'état
+    // du serveur (la vue ne doit jamais montrer un état qui n'existe pas).
+    // Si même le rechargement échoue (réseau, session), l'alerte reste et le
+    // rechargement est réessayé automatiquement.
+    async function structureFailed(err) {
+      const kind = AS.classifyError(err);
+      const message =
+        kind === 'offline' ? App.t('editor.offline') : kind === 'session' ? App.t('editor.sessionExpired') : err.message;
+      showError(new Error(App.t('editor.structureFailed', { message })));
+      try {
+        if (kind === 'conflict' && err.book) {
+          const { conflicts } = reconcile(err.book);
+          if (conflicts.length) saver.markConflict();
+        } else {
+          await resync();
+        }
+        saver.structureOk();
+        announce(App.t('editor.resynced'));
+      } catch (e) {
+        saver.structureFailed(e);
+      }
+      renderSpreads();
     }
 
     // ---- état ------------------------------------------------------------------
@@ -122,7 +375,13 @@
     // on recharge alors tout le boek.
     async function applyPlaced(res) {
       if (res.shifted && res.shifted.length) {
-        book = await App.api(`/api/books/${bookId}`);
+        // Le dépôt est enregistré ; si le rechargement échoue, l'indicateur
+        // le signale et le rechargement est réessayé.
+        try {
+          await resync();
+        } catch (err) {
+          saver.structureFailed(err);
+        }
         markCells(res.shifted, 'is-shifted');
         announce(App.t('editor.shifted', { n: res.shifted.length }));
       } else {
@@ -138,15 +397,13 @@
       let item = null;
       try {
         item = await applyPlaced(
-          await saver.track(
-            App.api(`/api/books/${bookId}/items`, {
-              method: 'POST',
-              body: { pageId, productId, beforeItemId },
-            })
-          )
+          await mutate(`/api/books/${bookId}/items`, {
+            method: 'POST',
+            body: { pageId, productId, beforeItemId },
+          })
         );
       } catch (err) {
-        showError(err);
+        await structureFailed(err);
       }
       renderSpreads();
       await ensureTrailingSpread();
@@ -156,15 +413,13 @@
     async function apiMove({ itemId, pageId, beforeItemId }) {
       try {
         await applyPlaced(
-          await saver.track(
-            App.api(`/api/books/${bookId}/items/${itemId}`, {
-              method: 'PATCH',
-              body: { pageId, beforeItemId },
-            })
-          )
+          await mutate(`/api/books/${bookId}/items/${itemId}`, {
+            method: 'PATCH',
+            body: { pageId, beforeItemId },
+          })
         );
       } catch (err) {
-        showError(err);
+        await structureFailed(err);
       }
       renderSpreads();
       await ensureTrailingSpread();
@@ -179,11 +434,11 @@
       const removed = page.items[idx];
       const nextId = page.items[idx + 1] ? page.items[idx + 1].id : null;
       try {
-        await saver.track(App.api(`/api/books/${bookId}/items/${itemId}`, { method: 'DELETE' }));
+        await mutate(`/api/books/${bookId}/items/${itemId}`, { method: 'DELETE' });
         removeItemFromState(itemId);
       } catch (err) {
-        showError(err);
-        renderSpreads();
+        // Déjà retiré ailleurs (404), réseau… : la vue est rechargée.
+        await structureFailed(err);
         return;
       }
       renderSpreads();
@@ -225,33 +480,31 @@
     // Recharge l'état complet depuis le serveur (opérations de pages : les
     // page_no des pages suivantes sont décalés côté serveur).
     async function refetchBook() {
-      book = await App.api(`/api/books/${bookId}`);
+      await resync();
       renderSpreads();
     }
 
     async function apiAddBlankPage(afterPageNo) {
       try {
-        await saver.track(
-          App.api(`/api/books/${bookId}/pages`, {
-            method: 'POST',
-            body: { afterPageNo, kind: 'blank' },
-          })
-        );
+        await mutate(`/api/books/${bookId}/pages`, {
+          method: 'POST',
+          body: { afterPageNo, kind: 'blank' },
+        });
         await refetchBook();
         await ensureTrailingSpread();
       } catch (err) {
-        showError(err);
+        await structureFailed(err);
       }
     }
 
     async function apiDeletePage(pageId) {
       try {
         // L'API refuse (409) une page non vide : l'erreur est affichée telle quelle.
-        await saver.track(App.api(`/api/books/${bookId}/pages/${pageId}`, { method: 'DELETE' }));
+        await mutate(`/api/books/${bookId}/pages/${pageId}`, { method: 'DELETE' });
         await refetchBook();
         await ensureTrailingSpread();
       } catch (err) {
-        showError(err);
+        await structureFailed(err);
       }
     }
 
@@ -272,13 +525,25 @@
       while (!endsWithEmptySpread() && guard < 4) {
         guard += 1;
         try {
-          const { page } = await saver.track(
-            App.api(`/api/books/${bookId}/pages`, { method: 'POST', body: {} })
-          );
+          const { page } = await mutate(`/api/books/${bookId}/pages`, { method: 'POST', body: {} });
           book.pages.push(page);
           added = true;
         } catch (err) {
-          showError(err);
+          // Page ajoutée d'office : pas de message « wijziging niet
+          // opgeslagen », mais l'indicateur le signale si le serveur est
+          // injoignable (et la resynchro est réessayée).
+          // Boek au plafond de pages (400 QUOTA) : pas de double page vide
+          // de plus, sans message — le plafond est dit quand on ajoute
+          // vraiment quelque chose.
+          // (La page n'a pas été ajoutée : la vue reste juste, rien à
+          // resynchroniser — structureSettled() termine l'échec suivi par track.)
+          const kind = AS.classifyError(err);
+          if (err.code !== 'QUOTA' && (kind === 'offline' || kind === 'session' || kind === 'retry')) {
+            saver.structureFailed(err);
+          } else {
+            saver.structureSettled();
+            if (err.code !== 'QUOTA') showError(err);
+          }
           break;
         }
       }
@@ -370,7 +635,7 @@
             // pour que l'indication grisée (:empty) réapparaisse.
             if (text === '') slotEl.textContent = '';
             book.texts[slotEl.dataset.slot] = text;
-            saver.scheduleDoc();
+            markField(TEXT + slotEl.dataset.slot, text);
           });
         }
       }
@@ -712,11 +977,8 @@
         }
         try {
           await saver.flush(); // les textes en attente partent AVANT la bascule
-          const { book: updated } = await saver.track(
-            App.api(`/api/books/${bookId}`, { method: 'PATCH', body: { fixedPages: wanted } })
-          );
-          book.fixedPages = updated.fixedPages;
-          book.texts = updated.texts;
+          // Réponse = boek complet : mutate() y recale la vue (version, textes).
+          await mutate(`/api/books/${bookId}`, { method: 'PATCH', body: { fixedPages: wanted } });
           renderSpreads();
           App.flash(
             'ok',
@@ -724,7 +986,7 @@
           );
         } catch (err) {
           fixedToggle.checked = Boolean(book.fixedPages);
-          showError(err);
+          await structureFailed(err);
         }
       });
     }
@@ -739,6 +1001,13 @@
         App.api('/api/products/meta'),
       ]);
       book = bookRes;
+      userId = me && me.user ? me.user.id : null;
+      // Anciennes clés sans utilisateur (≤ 1.1.0) : on ne sait pas à qui
+      // elles sont → jamais réappliquées, supprimées.
+      AS.createDraftStore(`tapigro-editor-draft-${bookId}`).clear();
+      AS.createDraftStore(`tapigro-editor-stash-${bookId}`).clear();
+      knownVersion = book.version;
+      serverDoc = { name: book.name, texts: { ...book.texts } };
       readOnly = !me || me.user.role === 'viewer';
       layout = layoutsRes.layouts.find((l) => l.id === book.layoutId);
       if (!layout) throw new Error(App.t('editor.unknownLayout', { id: book.layoutId }));
@@ -749,17 +1018,9 @@
         saveBtn.hidden = true;
         rootEl.classList.add('read-only');
       } else {
-        saver.setDocSave(() =>
-          App.api(`/api/books/${bookId}`, {
-            method: 'PATCH',
-            // Un nom vide (champ en cours de saisie) n'est jamais envoyé : le
-            // serveur garde l'ancien nom, seuls les textes partent.
-            body: { name: book.name.trim() || undefined, texts: book.texts },
-          })
-        );
         // Dernier nom NON VIDE : référence de la règle « le titre suit le nom »
         // (un champ effacé puis retapé ne casse pas le lien, title-follow.js).
-        let linkedName = book.name.trim();
+        linkedName = book.name.trim();
         nameEl.addEventListener('input', () => {
           // Le titre de couverture suit le nom tant qu'il lui est identique
           // (jamais personnalisé) — même règle que le serveur (docs/API.md).
@@ -769,16 +1030,20 @@
             book.texts.cover_title = followed;
             const slotEl = spreadsEl.querySelector('.lr-slot[data-slot="cover_title"]');
             if (slotEl) slotEl.textContent = followed;
+            markField(`${TEXT}cover_title`, followed);
           }
           if (nameEl.value.trim() !== '') linkedName = nameEl.value.trim();
           book.name = nameEl.value;
-          saver.scheduleDoc();
+          // Un nom vide (champ en cours de saisie) n'est jamais envoyé : le
+          // serveur garde l'ancien nom.
+          if (nameEl.value.trim() !== '') markField('name', nameEl.value.trim());
+          else saver.discard('name');
         });
         initFixedPagesSetting();
-        saveBtn.addEventListener('click', () => {
-          saver.scheduleDoc();
-          saver.flush().catch(showError);
-        });
+        // « Opslaan » : envoi immédiat (ou nouvel essai après un échec).
+        saveBtn.addEventListener('click', () => saver.retryNow());
+        restoreDraft();
+        initLeaveGuards();
       }
 
       renderSpreads();
@@ -861,6 +1126,179 @@
           setOpen(false);
           panelToggle.focus();
         }
+      });
+    }
+
+    // ---- indicateur, bandeau, brouillon -------------------------------------------------
+
+    // Bandeau d'alerte (sous la barre d'outils, en surimpression : la vue ne
+    // bouge pas). Reconstruit seulement quand son contenu change.
+    function showBanner(kind, text, actions) {
+      const key = `${kind}|${text}|${actions.map((a) => a.label).join('|')}`;
+      if (key === bannerKey) return;
+      bannerKey = key;
+      bannerEl.className = `editor-banner is-${kind}`;
+      const p = document.createElement('p');
+      p.className = 'editor-banner-text';
+      p.textContent = text;
+      const row = document.createElement('div');
+      row.className = 'editor-banner-actions';
+      for (const a of actions) {
+        let el;
+        if (a.href) {
+          // Nouvel onglet : l'éditeur (et la saisie) reste ouvert ici.
+          el = document.createElement('a');
+          el.href = a.href;
+          el.target = '_blank';
+          el.rel = 'noopener';
+          el.className = 'btn sec petit';
+        } else {
+          el = document.createElement('button');
+          el.type = 'button';
+          el.className = a.primary ? 'btn petit' : 'btn sec petit';
+          el.addEventListener('click', a.onClick);
+        }
+        el.textContent = a.label;
+        el.dataset.action = a.id;
+        row.appendChild(el);
+      }
+      bannerEl.replaceChildren(p, row);
+      bannerEl.hidden = false;
+    }
+
+    function hideBanner() {
+      if (bannerKey === null) return;
+      bannerKey = null;
+      bannerEl.hidden = true;
+      bannerEl.replaceChildren();
+    }
+
+    // Indicateur + bandeau, d'après l'état de l'autosave (jamais
+    // « Opgeslagen » tant que quelque chose n'est pas confirmé).
+    function renderUi(info = saver.info()) {
+      AS.renderStatus(statusEl, info);
+      if (!bannerEl) return;
+      const retry = { id: 'retry', label: App.t('editor.retry'), primary: true, onClick: () => saver.retryNow() };
+      if (info.state === 'conflict') {
+        showBanner('conflict', `${App.t('editor.conflict')} ${App.t('editor.conflictKeep')}`, [
+          { id: 'reload', label: App.t('editor.reload'), primary: true, onClick: reloadKeepingInput },
+        ]);
+      } else if (stash) {
+        const prefix = stashReason === 'draft' ? `${App.t('editor.draftConflict')} ` : '';
+        showBanner('stash', `${prefix}${App.t('editor.stashed')}`, [
+          { id: 'reapply', label: App.t('editor.reapply'), primary: true, onClick: reapplyStash },
+          { id: 'discard', label: App.t('editor.discard'), onClick: discardStash },
+        ]);
+      } else if (info.state === 'session') {
+        const stopped = info.gaveUp ? ` ${App.t('editor.autoRetryStopped')}` : '';
+        showBanner('error', `${App.t('editor.sessionExpired')} ${App.t('editor.sessionKeep')}${stopped}`, [
+          { id: 'login', label: App.t('editor.loginAgain'), href: App.url('/login') },
+          retry,
+        ]);
+      } else if (info.state === 'offline' || info.state === 'retry' || info.state === 'rejected') {
+        let reason = App.t('editor.offline');
+        if (info.state === 'rejected') reason = App.t('editor.saveRejected', { message: info.error ? info.error.message : '' });
+        else if (info.state === 'retry' && info.error) reason = info.error.message;
+        let more = '';
+        if (info.autoRetry) more = ` ${App.t('editor.autoRetry')}`;
+        else if (info.gaveUp) more = ` ${App.t('editor.autoRetryStopped')}`; // bouton seulement (10 min)
+        showBanner('error', `${reason}${more}`, [retry]);
+      } else {
+        hideBanner();
+      }
+    }
+
+    function setStash(entries, reason) {
+      stash = entries && entries.length ? entries : null;
+      stashReason = reason || 'conflict';
+      if (stash) stashStore.save(stash);
+      else stashStore.clear();
+      renderUi();
+    }
+
+    // [Herladen] : la saisie en attente est mise de côté (et gardée dans le
+    // navigateur), l'éditeur affiche la dernière version du serveur ; le
+    // bandeau propose ensuite de réappliquer cette saisie.
+    async function reloadKeepingInput() {
+      const kept = saver.entries();
+      saver.discardAll();
+      setStash(kept, 'conflict');
+      try {
+        await resync();
+      } catch (err) {
+        saver.structureFailed(err);
+      }
+      fixedCache = new Map();
+      renderSpreads();
+    }
+
+    // Applique une valeur à la vue (nom, texte de page fixe) et la marque à
+    // enregistrer (base = valeur actuelle du serveur).
+    function applyLocal(field, value) {
+      if (field === 'name') {
+        book.name = value;
+        nameEl.value = value;
+        if (value.trim()) linkedName = value.trim();
+      } else {
+        book.texts = { ...book.texts }; // nouvel objet : page fixe re-rendue
+        setField(book, field, value);
+      }
+      markField(field, value);
+    }
+
+    function reapplyStash() {
+      const kept = stash || [];
+      setStash(null);
+      for (const [field, c] of kept) {
+        if (!knownField(field) || !c || fieldValue(serverDoc, field) === c.value) continue;
+        applyLocal(field, c.value);
+      }
+      renderSpreads();
+      saver.flush();
+    }
+
+    function discardStash() {
+      setStash(null);
+    }
+
+    // Brouillon d'une visite précédente (onglet fermé, session expirée…) :
+    // réappliqué d'office si le serveur n'a pas changé ces champs depuis ;
+    // sinon mis de côté, avec le bandeau « Opnieuw toepassen / Weggooien ».
+    function restoreDraft() {
+      const valid = (e) => Array.isArray(e) && e[1] && typeof e[1] === 'object' && knownField(e[0]);
+      const draft = (draftStore.load() || []).filter(valid);
+      const keptBefore = (stashStore.load() || []).filter(valid);
+      draftStore.clear();
+      let restored = 0;
+      const conflicting = [];
+      for (const [field, c] of draft) {
+        const sv = fieldValue(serverDoc, field);
+        if (sv === c.value) continue;
+        if (sv === c.base) {
+          applyLocal(field, c.value);
+          restored += 1;
+        } else {
+          conflicting.push([field, c]);
+        }
+      }
+      const stashed = [...keptBefore, ...conflicting];
+      if (stashed.length) setStash(stashed, 'draft');
+      if (restored) App.flash('info', App.t('editor.draftRestored'));
+      renderUi();
+    }
+
+    // Avertissement avant de quitter la page tant que quelque chose n'est pas
+    // enregistré ; nouvel essai dès le retour du réseau ; envoi immédiat quand
+    // l'onglet passe en arrière-plan.
+    function initLeaveGuards() {
+      window.addEventListener('beforeunload', (e) => {
+        if (!saver.hasUnsaved()) return;
+        e.preventDefault();
+        e.returnValue = '';
+      });
+      window.addEventListener('online', () => saver.retryNow());
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') saver.flush();
       });
     }
 
